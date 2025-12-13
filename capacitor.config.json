@@ -1,0 +1,6 @@
+{
+  "appId": "com.betweenus.app",
+  "appName": "BetweenUs",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

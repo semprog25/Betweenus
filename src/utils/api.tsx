@@ -1,0 +1,188 @@
+/**
+ * API Service Layer for Between Us
+ * Easy-to-use functions for all backend operations
+ */
+
+import { callServer } from './supabase/client';
+
+// Re-export auth functions for convenience
+export * from './auth';
+
+// ==================== CHECK-INS ====================
+
+export async function saveCheckIn(checkInData: {
+  mainMood: string;
+  subMood: string;
+  emoji: string;
+  color: string;
+  note?: string;
+  activities?: string[];
+}) {
+  return callServer('/check-ins', {
+    method: 'POST',
+    body: JSON.stringify({
+      date: new Date().toISOString(),
+      ...checkInData,
+    }),
+  });
+}
+
+export async function getCheckIns(startDate?: string, endDate?: string) {
+  const params = new URLSearchParams();
+  if (startDate) params.append('startDate', startDate);
+  if (endDate) params.append('endDate', endDate);
+  
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return callServer(`/check-ins${query}`, { method: 'GET' });
+}
+
+// ==================== JOURNAL ====================
+
+export async function saveJournalEntry(entryData: {
+  content: string;
+  activities?: string[];
+  mood?: string;
+}) {
+  return callServer('/journal', {
+    method: 'POST',
+    body: JSON.stringify(entryData),
+  });
+}
+
+export async function getJournalEntries() {
+  return callServer('/journal', { method: 'GET' });
+}
+
+export async function deleteJournalEntry(entryId: string) {
+  return callServer(`/journal/${entryId}`, { method: 'DELETE' });
+}
+
+// ==================== POSTS (SHARE & LISTEN) ====================
+
+export async function createPost(postData: {
+  content: string;
+  mood?: string;
+  languages?: string[];
+  isAnonymous?: boolean;
+  userId?: string;
+  categories?: string[];
+}) {
+  return callServer('/posts', {
+    method: 'POST',
+    body: JSON.stringify(postData),
+  });
+}
+
+export async function getPosts(language?: string) {
+  const query = language ? `?language=${language}` : '';
+  return callServer(`/posts${query}`, { method: 'GET' });
+}
+
+export async function upvotePost(postId: string, userId?: string) {
+  return callServer(`/posts/${postId}/upvote`, { 
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function downvotePost(postId: string, userId?: string) {
+  return callServer(`/posts/${postId}/downvote`, { 
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function upvoteReply(postId: string, replyId: string, userId?: string) {
+  return callServer(`/posts/${postId}/reply/${replyId}/upvote`, { 
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function downvoteReply(postId: string, replyId: string, userId?: string) {
+  return callServer(`/posts/${postId}/reply/${replyId}/downvote`, { 
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function replyToPost(postId: string, content: string, userId?: string) {
+  return callServer(`/posts/${postId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ content, userId }),
+  });
+}
+
+export async function deletePost(postId: string, userId?: string) {
+  const query = userId ? `?userId=${userId}` : '';
+  return callServer(`/posts/${postId}${query}`, { method: 'DELETE' });
+}
+
+export async function editPost(postId: string, content: string, userId: string) {
+  return callServer(`/posts/${postId}/edit`, {
+    method: 'POST',
+    body: JSON.stringify({ content, userId }),
+  });
+}
+
+// ==================== STATISTICS ====================
+
+export async function getUserStats(userId?: string) {
+  const query = userId ? `?userId=${userId}` : '';
+  return callServer(`/stats${query}`, { method: 'GET' });
+}
+
+export async function getUserPosts(userId: string) {
+  return callServer(`/user-posts?userId=${userId}`, { method: 'GET' });
+}
+
+export async function getUserReplies(userId: string) {
+  return callServer(`/user-replies?userId=${userId}`, { method: 'GET' });
+}
+
+// Get user level and achievements
+export async function getUserLevel(userId: string) {
+  return callServer(`/user-level?userId=${userId}`, { method: 'GET' });
+}
+
+// Check if username is available
+export async function checkUsernameAvailability(username: string) {
+  return callServer(`/auth/check-username/${encodeURIComponent(username)}`, { method: 'GET' });
+}
+
+// ==================== SUBSCRIPTION & MONETIZATION ====================
+
+export async function getSubscription(userId: string) {
+  return callServer(`/subscription?userId=${userId}`, { method: 'GET' });
+}
+
+export async function upgradeSubscription(userId: string, tier: 'premium' | 'pro') {
+  return callServer('/subscription/upgrade', {
+    method: 'POST',
+    body: JSON.stringify({ userId, tier }),
+  });
+}
+
+export async function buyCredits(userId: string, amount: number) {
+  return callServer('/subscription/buy-credits', {
+    method: 'POST',
+    body: JSON.stringify({ userId, amount }),
+  });
+}
+
+export async function canPost(userId: string) {
+  return callServer(`/subscription/can-post?userId=${userId}`, { method: 'GET' });
+}
+
+export async function incrementPostCount(userId: string) {
+  return callServer('/subscription/increment-post', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+// ==================== HEALTH CHECK ====================
+
+export async function healthCheck() {
+  return callServer('/health', { method: 'GET' });
+}
