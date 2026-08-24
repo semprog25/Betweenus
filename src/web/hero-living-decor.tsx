@@ -1,5 +1,5 @@
 import { Heart, Sparkles, Star } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type DecorKind = 'heart' | 'star' | 'sparkle' | 'dot'
 type DecorColor = 'magenta' | 'violet' | 'pink' | 'purple' | 'orange'
@@ -38,6 +38,33 @@ const DESKTOP_SPECS: LivingDecorSpec[] = [
   { id: 'd18', kind: 'star', color: 'pink', top: '82%', left: '38%', size: 13, duration: 10.2, delay: 2.5, drift: 'c' },
 ]
 
+const MOBILE_SPECS: LivingDecorSpec[] = [
+  { id: 'm1', kind: 'heart', color: 'magenta', top: '6%', left: '8%', size: 16, duration: 11, delay: 0, drift: 'a' },
+  { id: 'm2', kind: 'sparkle', color: 'violet', top: '10%', left: '78%', size: 14, duration: 8.5, delay: 1.2, drift: 'b' },
+  { id: 'm3', kind: 'star', color: 'pink', top: '4%', left: '52%', size: 12, duration: 9.5, delay: 0.4, drift: 'c' },
+  { id: 'm4', kind: 'dot', color: 'purple', top: '18%', left: '22%', size: 5, duration: 7, delay: 2.1, drift: 'a' },
+  { id: 'm5', kind: 'dot', color: 'orange', top: '16%', left: '68%', size: 4, duration: 6.5, delay: 0.8, drift: 'b' },
+  { id: 'm6', kind: 'heart', color: 'pink', top: '26%', left: '84%', size: 14, duration: 10, delay: 1.6, drift: 'c' },
+  { id: 'm7', kind: 'sparkle', color: 'orange', top: '32%', left: '12%', size: 13, duration: 8, delay: 2.4, drift: 'a' },
+  { id: 'm8', kind: 'star', color: 'violet', top: '38%', left: '62%', size: 11, duration: 9, delay: 0.2, drift: 'b' },
+  { id: 'm9', kind: 'dot', color: 'magenta', top: '44%', left: '38%', size: 5, duration: 7.5, delay: 1.8, drift: 'c' },
+  { id: 'm10', kind: 'sparkle', color: 'magenta', top: '52%', left: '72%', size: 12, duration: 9.2, delay: 0.6, drift: 'a' },
+]
+
+function useIsMobileHeroDecor(): boolean {
+  const [mobile, setMobile] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const sync = () => setMobile(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  return mobile
+}
+
 function DecorIcon({ kind, size }: { kind: DecorKind; size: number }) {
   if (kind === 'heart') return <Heart size={size} strokeWidth={1.75} />
   if (kind === 'sparkle') return <Sparkles size={size} strokeWidth={1.75} />
@@ -46,7 +73,8 @@ function DecorIcon({ kind, size }: { kind: DecorKind; size: number }) {
 }
 
 export function HeroLivingDecor() {
-  const specs = useMemo(() => DESKTOP_SPECS, [])
+  const isMobile = useIsMobileHeroDecor()
+  const specs = useMemo(() => (isMobile ? MOBILE_SPECS : DESKTOP_SPECS), [isMobile])
 
   return (
     <div className="bu-hero-decor" aria-hidden="true">
@@ -58,7 +86,7 @@ export function HeroLivingDecor() {
             `bu-hero-decor-particle--${spec.kind}`,
             `bu-hero-decor-particle--color-${spec.color}`,
             `bu-hero-decor-particle--drift-${spec.drift}`,
-            spec.mobile ? 'bu-hero-decor-particle--mobile' : 'bu-hero-decor-particle--desktop-only',
+            isMobile ? 'bu-hero-decor-particle--mobile-layout' : spec.mobile ? 'bu-hero-decor-particle--mobile' : 'bu-hero-decor-particle--desktop-only',
           ].join(' ')}
           style={{
             top: spec.top,

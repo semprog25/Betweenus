@@ -5,7 +5,6 @@ type DeckRole =
   | 'front'
   | 'middle'
   | 'back'
-  | 'middle-mobile'
   | 'exiting'
   | 'entering-back'
 
@@ -52,27 +51,21 @@ function buildLayers(
   phase: 'idle' | 'dealing',
   exitingCard: HeroPreviewCard | null,
   incomingCard: HeroPreviewCard | null,
-  isMobile: boolean,
 ): DeckLayer[] {
   if (phase === 'dealing' && exitingCard && incomingCard) {
-    const layers: DeckLayer[] = []
-    if (!isMobile) {
-      layers.push({ card: incomingCard, role: 'entering-back' })
-    }
-    layers.push({ card: deck[2], role: isMobile ? 'middle-mobile' : 'middle' })
-    layers.push({ card: deck[1], role: 'front' })
-    layers.push({ card: exitingCard, role: 'exiting' })
-    return layers
+    return [
+      { card: incomingCard, role: 'entering-back' },
+      { card: deck[2], role: 'middle' },
+      { card: deck[1], role: 'front' },
+      { card: exitingCard, role: 'exiting' },
+    ]
   }
 
-  const layers: DeckLayer[] = [
-    { card: deck[1], role: isMobile ? 'middle-mobile' : 'middle' },
+  return [
+    { card: deck[2], role: 'back' },
+    { card: deck[1], role: 'middle' },
     { card: deck[0], role: 'front' },
   ]
-  if (!isMobile) {
-    layers.unshift({ card: deck[2], role: 'back' })
-  }
-  return layers
 }
 
 interface RotatingHeroCardsProps {
@@ -144,7 +137,7 @@ export function RotatingHeroCards({ onExplore }: RotatingHeroCardsProps) {
     }
   }, [dealNext])
 
-  const layers = buildLayers(deck, phase, exitingCard, incomingCard, isMobile)
+  const layers = buildLayers(deck, phase, exitingCard, incomingCard)
 
   return (
     <div
