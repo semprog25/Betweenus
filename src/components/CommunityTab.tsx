@@ -30,7 +30,7 @@ const getRelativeTime = (dateString: string, t: (key: string) => string) => {
 // Helper function for anonymous names
 const generateAnonymousName = (userId: string, t: (key: string) => string) => {
   const adjectives = ['Kind', 'Brave', 'Wise', 'Gentle', 'Strong', 'Caring', 'Hopeful', 'Peaceful'];
-  const nouns = ['Soul', 'Heart', 'Spirit', 'Friend', 'Voice', 'Listener', 'Helper', 'Guide'];
+  const nouns = ['Soul', 'Heart', 'Spirit', 'Friend', 'Writer', 'Reader', 'Helper', 'Guide'];
   const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const adj = adjectives[hash % adjectives.length];
   const noun = nouns[(hash * 7) % nouns.length];
