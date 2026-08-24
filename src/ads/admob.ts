@@ -26,7 +26,7 @@ export const ADMOB_PRODUCTION = {
 } as const
 
 export function getAdUnits() {
-  if (USE_PRODUCTION && ADMOB_PRODUCTION.banner) return ADMOB_PRODUCTION
+  if (USE_PRODUCTION && (ADMOB_PRODUCTION.native || ADMOB_PRODUCTION.banner)) return ADMOB_PRODUCTION
   return ADMOB_TEST
 }
 

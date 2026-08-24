@@ -14,6 +14,9 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Application web build only — public website is betweenus_landing @ betweenus.fun
+# Do NOT set a custom domain CNAME in this repository.
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,6 +28,13 @@ jobs:
           node-version: '20'
           cache: npm
 
+      - name: Guard against website domain reclaim
+        run: |
+          if [ -f public/CNAME ] || [ -f CNAME ]; then
+            echo "ERROR: Application repo must not contain a CNAME. Public site is betweenus_landing."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
@@ -32,7 +42,7 @@ jobs:
         env:
           VITE_SUPABASE_PROJECT_ID: qoqbdiixztolvtcjdnle
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SITE_URL: https://betweenus.fun
+          VITE_SITE_URL: https://semprog25.github.io/Betweenus
         run: npm run build
 
       - name: Upload artifact
@@ -45,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: https://betweenus.fun
+      url: https://semprog25.github.io/Betweenus/
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
