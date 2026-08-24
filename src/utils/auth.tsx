@@ -3,9 +3,11 @@
  * Handles email/password, Google, and Apple sign-in
  */
 
+import { Browser } from '@capacitor/browser';
 import { createClient } from './supabase/client';
 import { callServer } from './supabase/client';
 import { getOAuthRedirectUrl } from '../config/site';
+import { isNativeMobile } from './platform';
 
 // Types
 export interface User {
@@ -25,9 +27,18 @@ export interface AuthSession {
   user: User;
 }
 
+export type PendingAuthActionType = 'me_too' | 'reply' | 'save' | 'spill' | 'generic'
+
+export interface PendingAuthAction {
+  type: PendingAuthActionType
+  postId?: string
+  createdAt: number
+}
+
 // Storage keys
 const SESSION_KEY = 'between_us_session';
 const USER_KEY = 'between_us_user';
+const PENDING_AUTH_ACTION_KEY = 'between_us_pending_auth_action';
 
 // ==================== EMAIL/PASSWORD AUTH ====================
 
@@ -64,59 +75,99 @@ export async function signInWithEmail(email: string, password: string) {
   return response;
 }
 
+// ==================== PENDING AUTH ACTIONS (return-to-action) ====================
+
+export function setPendingAuthAction(action: Omit<PendingAuthAction, 'createdAt'> & { createdAt?: number }) {
+  if (typeof window === 'undefined') return
+  try {
+    // Never persist client-controlled identity fields — JWT is authoritative after login
+    const payload: PendingAuthAction = {
+      type: action.type,
+      postId: action.postId,
+      createdAt: action.createdAt ?? Date.now(),
+    }
+    localStorage.setItem(PENDING_AUTH_ACTION_KEY, JSON.stringify(payload))
+  } catch (error) {
+    console.warn('Could not persist pending auth action', error)
+  }
+}
+
+export function peekPendingAuthAction(): PendingAuthAction | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(PENDING_AUTH_ACTION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PendingAuthAction & Record<string, unknown>
+    if (!parsed || typeof parsed.type !== 'string') return null
+    return {
+      type: parsed.type as PendingAuthAction['type'],
+      postId: typeof parsed.postId === 'string' ? parsed.postId : undefined,
+      createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now(),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function consumePendingAuthAction(): PendingAuthAction | null {
+  const pending = peekPendingAuthAction()
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(PENDING_AUTH_ACTION_KEY)
+  }
+  return pending
+}
+
 // ==================== SOCIAL AUTH (GOOGLE, APPLE) ====================
+
+async function startOAuthProvider(
+  provider: 'google' | 'apple',
+  queryParams?: Record<string, string>,
+) {
+  const supabase = createClient()
+  const redirectTo = getOAuthRedirectUrl()
+  const native = isNativeMobile()
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo,
+      skipBrowserRedirect: native,
+      ...(queryParams ? { queryParams } : {}),
+    },
+  })
+
+  if (error) throw error
+
+  if (native) {
+    if (!data.url) {
+      throw new Error('OAuth URL missing — check Supabase provider configuration')
+    }
+    await Browser.open({ url: data.url, windowName: '_self' })
+  }
+
+  return data
+}
 
 export async function signInWithGoogle() {
   try {
-    const supabase = createClient();
-    
-    // Note: You MUST configure Google OAuth in Supabase Dashboard first!
-    // Follow: https://supabase.com/docs/guides/auth/social-login/auth-google
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: getOAuthRedirectUrl(),
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    });
-
-    if (error) {
-      console.error('Google sign-in error:', error);
-      throw error;
-    }
-
-    return data;
+    // Note: Configure Google OAuth in Supabase Dashboard + redirect URLs
+    return await startOAuthProvider('google', {
+      access_type: 'offline',
+      prompt: 'consent',
+    })
   } catch (error) {
-    console.error('Google sign-in error:', error);
-    throw error;
+    console.error('Google sign-in error:', error)
+    throw error
   }
 }
 
 export async function signInWithApple() {
   try {
-    const supabase = createClient();
-    
-    // Note: You MUST configure Apple OAuth in Supabase Dashboard first!
-    // Follow: https://supabase.com/docs/guides/auth/social-login/auth-apple
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo: getOAuthRedirectUrl(),
-      },
-    });
-
-    if (error) {
-      console.error('Apple sign-in error:', error);
-      throw error;
-    }
-
-    return data;
+    // Note: Apple Sign In still requires Apple Developer Console + Supabase provider setup
+    return await startOAuthProvider('apple')
   } catch (error) {
-    console.error('Apple sign-in error:', error);
-    throw error;
+    console.error('Apple sign-in error:', error)
+    throw error
   }
 }
 
@@ -243,6 +294,12 @@ export async function signOut() {
           'Authorization': `Bearer ${session.accessToken}`,
         },
       });
+    }
+
+    try {
+      await createClient().auth.signOut()
+    } catch {
+      // ignore supabase signOut failures — custom session still cleared
     }
 
     clearSession();
@@ -433,41 +490,103 @@ export async function deleteAccount() {
 
 // ==================== OAUTH CALLBACK HANDLER ====================
 
+async function persistOAuthSession(session: { access_token: string; user: User }) {
+  saveSession(session.access_token, session.user as User)
+
+  try {
+    await callServer('/auth/send-welcome-email', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to send welcome email:', error)
+  }
+
+  return session
+}
+
+/**
+ * Process an OAuth return URL from Capacitor appUrlOpen (PKCE code or hash tokens).
+ */
+export async function processAuthCallbackUrl(url: string) {
+  try {
+    const supabase = createClient()
+    const parsed = new URL(url)
+    const code = parsed.searchParams.get('code')
+    const oauthError = parsed.searchParams.get('error_description') || parsed.searchParams.get('error')
+
+    if (oauthError) {
+      console.error('OAuth provider error:', oauthError)
+      return null
+    }
+
+    if (code) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        console.error('OAuth code exchange failed:', error)
+        return null
+      }
+      if (data.session) {
+        return persistOAuthSession(data.session as { access_token: string; user: User })
+      }
+      return null
+    }
+
+    // Hash-token fallback (implicit) if present in deep link
+    if (url.includes('access_token=')) {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('OAuth session parse failed:', error)
+        return null
+      }
+      if (data.session) {
+        return persistOAuthSession(data.session as { access_token: string; user: User })
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('OAuth deep-link callback error:', error)
+    return null
+  }
+}
+
 export async function handleOAuthCallback() {
   try {
-    const supabase = createClient();
-    
-    // Check if we have a session from OAuth redirect
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
+    const supabase = createClient()
+
+    // Web: PKCE/code in query, or hash tokens via detectSessionInUrl
+    if (typeof window !== 'undefined' && !isNativeMobile()) {
+      const params = new URLSearchParams(window.location.search)
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const code = params.get('code') || hashParams.get('code')
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+        if (!error && data.session) {
+          const session = await persistOAuthSession(data.session as { access_token: string; user: User })
+          const cleanUrl = `${window.location.origin}${window.location.pathname}`
+          window.history.replaceState({}, '', cleanUrl)
+          return session
+        }
+      }
+    }
+
+    const { data: { session }, error } = await supabase.auth.getSession()
+
     if (error) {
-      console.error('OAuth callback error:', error);
-      return null;
+      console.error('OAuth callback error:', error)
+      return null
     }
 
     if (session) {
-      // Save session
-      saveSession(session.access_token, session.user as User);
-      
-      // Send welcome email for OAuth users
-      try {
-        await callServer('/auth/send-welcome-email', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        });
-      } catch (error) {
-        console.error('Failed to send welcome email:', error);
-        // Don't fail the OAuth flow if email fails
-      }
-      
-      return session;
+      return persistOAuthSession(session as { access_token: string; user: User })
     }
 
-    return null;
+    return null
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    return null;
+    console.error('OAuth callback error:', error)
+    return null
   }
 }

@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { projectId, publicAnonKey } from './info'
 import { EDGE_FUNCTION_BASE } from '../../config/site'
+import { isNativeMobile } from '../platform'
 
 const SESSION_KEY = 'between_us_session'
 
@@ -9,7 +10,15 @@ let supabaseClient: ReturnType<typeof createSupabaseClient> | null = null
 export function createClient() {
   if (!supabaseClient) {
     const supabaseUrl = `https://${projectId}.supabase.co`
-    supabaseClient = createSupabaseClient(supabaseUrl, publicAnonKey)
+    const native = isNativeMobile()
+    supabaseClient = createSupabaseClient(supabaseUrl, publicAnonKey, {
+      auth: {
+        flowType: 'pkce',
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: !native,
+      },
+    })
   }
   return supabaseClient
 }

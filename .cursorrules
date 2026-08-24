@@ -1,0 +1,19 @@
+# Between Us — project intelligence
+
+## Repository split (never mix)
+- Website (`betweenus_landing`): betweenus.fun — discovery, SEO, Journal, acquisition
+- App (this repo): com.betweenus.app — community, Spill, reactions, retention
+- Supabase: one auth + one content system for all platforms
+
+## Security
+- Baseline: SECURITY_AUDIT_REPORT.md (2026-08-24)
+- Never trust client userId/ownerId/role/premium/moderation/ads
+- After backend changes: `npm run test:security` must stay 16/16+
+
+## Naming
+- Personal check-in journal ≠ editorial Between Us Journal
+- Spill = post create; Me Too = signature reaction (not yet built)
+
+## Domain
+- Do not add CNAME for betweenus.fun in the app repo
+- Do not redirect root website to the app shell

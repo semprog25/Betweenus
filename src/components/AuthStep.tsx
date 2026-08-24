@@ -10,7 +10,7 @@ import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { signUpWithEmail, signInWithEmail, signInWithGoogle, signInWithApple } from '../utils/auth';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from './LanguageContext';
-import { isIOS } from '../utils/platform';
+import { isNativeMobile, isWeb } from '../utils/platform';
 import logoImage from '../assets/betweenus-logo.png';
 
 // Apple logo SVG
@@ -131,7 +131,9 @@ export function AuthStep({ userName, selectedLanguages, onComplete, onBack }: Au
   };
 
   const handleAppleSignIn = async () => {
-    if (isIOS()) {
+    // Native (iOS/Android) + web use the same Supabase Apple OAuth provider.
+    // Apple Developer Console must still be configured for production success.
+    if (isNativeMobile() || isWeb()) {
       setIsLoading(true);
       try {
         await signInWithApple();

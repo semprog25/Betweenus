@@ -13,7 +13,8 @@ import { AchievementToast } from './components/AchievementToast';
 import { ThemeProvider, useTheme } from './components/ThemeProvider';
 import { LanguageProvider, useLanguage } from './components/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { getSession, handleOAuthCallback, getUserProfile } from './utils/auth';
+import { getSession, getUserProfile, type PendingAuthAction } from './utils/auth';
+import { registerDeepLinkHandlers, consumeOpenStoryId } from './utils/deep-links';
 import { useAchievementNotifications } from './hooks/useAchievementNotifications';
 import { toast } from 'sonner@2.0.3';
 import logoImage from './assets/betweenus-logo.png';
@@ -171,23 +172,54 @@ function AppContent() {
     loadUserProfile();
   }, []);
 
-  // Handle OAuth callback (Google/Apple sign-in)
+  // Handle OAuth callback + native deep links (appUrlOpen)
   useEffect(() => {
-    handleOAuthCallback().then((session) => {
-      if (session) {
-        console.log('OAuth sign-in successful!', session);
-        toast.success(t('auth.signedInSuccess'));
-        setHasCompletedOnboarding(true);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('hasCompletedOnboarding', 'true');
-        }
-        // Load user data
-        const metadata = session.user?.user_metadata;
-        if (metadata?.name) setUserName(metadata.name);
-        if (metadata?.avatar_url) setProfilePicture(metadata.avatar_url);
+    let removeListener: (() => void) | undefined
+
+    const applyAuthenticatedState = (pending: PendingAuthAction | null) => {
+      toast.success(t('auth.signedInSuccess'))
+      setHasCompletedOnboarding(true)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hasCompletedOnboarding', 'true')
       }
-    });
-  }, []);
+      const session = getSession()
+      const metadata = session?.user?.user_metadata
+      if (metadata?.name) setUserName(metadata.name)
+      if (metadata?.avatar_url) setProfilePicture(metadata.avatar_url)
+
+      // Prepare return-to-action without inventing Phase 3 social features
+      if (pending?.type === 'spill') {
+        setActiveTab('share')
+      } else if (pending?.type === 'me_too' || pending?.type === 'reply' || pending?.type === 'save') {
+        setActiveTab('community')
+        if (pending.postId) {
+          try {
+            localStorage.setItem('between_us_open_story_id', pending.postId)
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    registerDeepLinkHandlers({
+      onAuthenticated: applyAuthenticatedState,
+      onStoryOpen: (storyId) => {
+        setActiveTab('community')
+        toast.message('Opening story…', { description: storyId })
+      },
+    }).then((cleanup) => {
+      removeListener = cleanup
+      const storyId = consumeOpenStoryId()
+      if (storyId) {
+        setActiveTab('community')
+      }
+    })
+
+    return () => {
+      removeListener?.()
+    }
+  }, [])
 
   const isDevEnvironment = import.meta.env.DEV
 
