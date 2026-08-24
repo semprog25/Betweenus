@@ -502,6 +502,33 @@ app.get("/make-server-6c9b0e48/posts", async (c) => {
   }
 });
 
+// Public single-post fetch for website story pages / deep links
+app.get("/make-server-6c9b0e48/posts/:postId", async (c) => {
+  try {
+    const postId = c.req.param("postId")
+    if (!postId || postId.includes("..") || postId.length > 200) {
+      return c.json({ error: "Invalid post id" }, 400)
+    }
+
+    const post = await kv.get(`post:${postId}`)
+    if (!post || (post as any).hiddenAt || (post as any).deletedAt) {
+      return c.json({ error: "Story not found" }, 404)
+    }
+
+    const replies = Array.isArray((post as any).replies) ? (post as any).replies : []
+    return c.json({
+      post: {
+        ...(post as object),
+        replies,
+        replyCount: replies.length,
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching post:", error)
+    return c.json({ error: "Failed to fetch story" }, 500)
+  }
+})
+
 // Edit a post (for Community tab)
 app.put("/make-server-6c9b0e48/community/posts/:postId", async (c) => {
   try {
