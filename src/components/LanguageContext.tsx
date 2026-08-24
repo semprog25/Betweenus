@@ -376,6 +376,8 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'profile.selectOneLang': 'Please select at least one language',
     'profile.settings': 'Settings',
     'profile.accountSettings': 'Account Settings',
+    'profile.discoverMore': 'Discover More',
+    'profile.partnerApps': 'Partner Apps',
     'profile.signOut': 'Sign Out',
     'profile.signOutConfirm': 'Are you sure you want to sign out?',
     'profile.confirm': 'Confirm',

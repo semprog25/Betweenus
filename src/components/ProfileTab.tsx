@@ -25,7 +25,7 @@ import { TermsOfService } from './TermsOfService';
 import { TutorialModal } from './TutorialModal';
 import { HelpCenterModal } from './HelpCenterModal';
 import { FeedbackModal } from './FeedbackModal';
-import { CrossPromoCarousel } from './CrossPromoCarousel';
+import { SemprogDiscoverMoreCarousel } from './semprog-discover-more/SemprogDiscoverMoreCarousel';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import betweenUsLogo from '../assets/betweenus-logo.png';
 import { resolveBadgeIcon } from './badge-icons';
@@ -57,6 +57,7 @@ export function ProfileTab({
 }: ProfileTabProps) {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const isDarkMode = theme === 'dark';
   const [userSession, setUserSession] = useState(getSession());
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [localSelectedLanguages, setLocalSelectedLanguages] = useState<string[]>(selectedLanguages);
@@ -1461,7 +1462,18 @@ export function ProfileTab({
             transition={{ delay: 0.6 }}
             className="pb-6"
           >
-            <CrossPromoCarousel />
+            <div
+              className={`rounded-2xl overflow-hidden mb-6 ${isDarkMode ? 'bg-[#242424]' : 'bg-white shadow-lg'}`}
+            >
+              <SemprogDiscoverMoreCarousel
+                excludeAppId="between-us"
+                isDarkMode={isDarkMode}
+                labels={{
+                  discoverMore: t('profile.discoverMore'),
+                  partnerApps: t('profile.partnerApps'),
+                }}
+              />
+            </div>
             <Button
               onClick={handleSignOut}
               disabled={isSigningOut}
