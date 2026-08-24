@@ -159,7 +159,7 @@ export function WebAppShell({
           <button
             type="button"
             onClick={() => setActiveNav('write')}
-            className="bu-web-mobile-write rounded-xl bg-gradient-to-r from-fuchsia-500 to-orange-400 px-3 py-1.5 text-xs font-semibold text-white"
+            className="bu-web-mobile-write"
           >
             Write
           </button>
