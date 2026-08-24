@@ -10,7 +10,7 @@ import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from './LanguageContext';
 import { SubscriptionModal } from './SubscriptionModal';
-import { createPost, canPost, incrementPostCount, getSubscription, uploadPostImage } from '../utils/api';
+import { createPost, canPost, getSubscription, uploadPostImage } from '../utils/api';
 import { getSession } from '../utils/auth';
 
 const GUIDELINES_KEY = 'between_us_guidelines_accepted';
@@ -222,7 +222,6 @@ export function ShareTab() {
       });
       
       if (session?.user?.id) {
-        await incrementPostCount(session.user.id);
         await loadLimits();
       }
       

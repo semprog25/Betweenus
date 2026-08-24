@@ -4,7 +4,7 @@
  */
 
 import { callServer } from './supabase/client';
-import { getActorIdForRequest } from './actor-id';
+import { getActorId, getActorIdForRequest } from './actor-id';
 
 // Re-export auth functions for convenience
 export * from './auth';
@@ -88,7 +88,11 @@ export async function createPost(postData: {
 }
 
 export async function getPosts(language?: string) {
-  const query = language ? `?language=${language}` : '';
+  const params = new URLSearchParams();
+  if (language) params.set('language', language);
+  const actor = getActorId();
+  if (actor) params.set('viewerId', actor);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return callServer(`/posts${query}`, { method: 'GET' });
 }
 
@@ -177,27 +181,26 @@ export async function reportPost(postId: string, reason: ReportReason, details?:
 
 // ==================== STATISTICS ====================
 
-export async function getUserStats(userId?: string) {
-  const query = userId ? `?userId=${userId}` : '';
-  return callServer(`/stats${query}`, { method: 'GET' });
+export async function getUserStats(_userId?: string) {
+  return callServer('/stats', { method: 'GET' });
 }
 
-export async function getUserPosts(userId: string) {
-  return callServer(`/user-posts?userId=${userId}`, { method: 'GET' });
+export async function getUserPosts(_userId?: string) {
+  return callServer('/user-posts', { method: 'GET' });
 }
 
-export async function getUserReplies(userId: string) {
-  return callServer(`/user-replies?userId=${userId}`, { method: 'GET' });
+export async function getUserReplies(_userId?: string) {
+  return callServer('/user-replies', { method: 'GET' });
 }
 
 // Get user level and achievements
-export async function getUserLevel(userId: string) {
-  return callServer(`/user-level?userId=${userId}`, { method: 'GET' });
+export async function getUserLevel(_userId?: string) {
+  return callServer('/user-level', { method: 'GET' });
 }
 
 // Get user reputation (score + isTrusted for spam-flagging)
-export async function getUserReputation(userId: string) {
-  return callServer(`/user-reputation?userId=${userId}`, { method: 'GET' });
+export async function getUserReputation(_userId?: string) {
+  return callServer('/user-reputation', { method: 'GET' });
 }
 
 // Flag post as spam (trusted users only)
@@ -215,33 +218,31 @@ export async function checkUsernameAvailability(username: string) {
 
 // ==================== SUBSCRIPTION & MONETIZATION ====================
 
-export async function getSubscription(userId: string) {
-  return callServer(`/subscription?userId=${userId}`, { method: 'GET' });
+export async function getSubscription(_userId?: string) {
+  return callServer('/subscription', { method: 'GET' });
 }
 
-export async function upgradeSubscription(userId: string, tier: 'premium' | 'pro') {
+export async function upgradeSubscription(_userId: string, tier: 'premium' | 'pro') {
   return callServer('/subscription/upgrade', {
     method: 'POST',
-    body: JSON.stringify({ userId, tier }),
+    body: JSON.stringify({ tier }),
   });
 }
 
-export async function buyCredits(userId: string, amount: number) {
+export async function buyCredits(_userId: string, amount: number) {
   return callServer('/subscription/buy-credits', {
     method: 'POST',
-    body: JSON.stringify({ userId, amount }),
+    body: JSON.stringify({ amount }),
   });
 }
 
-export async function canPost(userId: string) {
-  return callServer(`/subscription/can-post?userId=${userId}`, { method: 'GET' });
+export async function canPost(_userId?: string) {
+  return callServer('/subscription/can-post', { method: 'GET' });
 }
 
-export async function incrementPostCount(userId: string) {
-  return callServer('/subscription/increment-post', {
-    method: 'POST',
-    body: JSON.stringify({ userId }),
-  });
+export async function incrementPostCount(_userId?: string) {
+  // Post count is incremented server-side on POST /posts; kept for compatibility.
+  return { success: true, deferred: true };
 }
 
 // ==================== HEALTH CHECK ====================

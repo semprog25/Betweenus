@@ -91,8 +91,10 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
     setIsLoading(true)
     try {
       const languagesParam = selectedLanguages.length > 0 ? selectedLanguages.join(',') : 'en'
+      const actor = getActorId()
+      const viewerQuery = actor ? `&viewerId=${encodeURIComponent(actor)}` : ''
       const result = await callServer(
-        `/posts?language=${encodeURIComponent(languagesParam)}&sort=${filter}&limit=${MAX_POSTS}`,
+        `/posts?language=${encodeURIComponent(languagesParam)}&sort=${filter}&limit=${MAX_POSTS}${viewerQuery}`,
         { method: 'GET' },
       )
 

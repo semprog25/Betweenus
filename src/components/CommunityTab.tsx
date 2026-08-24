@@ -200,7 +200,9 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
   const getPosts = async (languages: string[]) => {
     const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
     const languagesParam = languages.length > 0 ? languages.join(',') : 'en';
-    const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}`, {
+    const actor = getActorId();
+    const viewerQuery = actor ? `&viewerId=${encodeURIComponent(actor)}` : '';
+    const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}${viewerQuery}`, {
       headers: {
         'Authorization': `Bearer ${publicAnonKey}`,
       },
@@ -293,7 +295,9 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       // Fetch posts based on current sort filter and selected languages
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
       const languagesParam = selectedLanguages.length > 0 ? selectedLanguages.join(',') : 'en';
-      const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}&sort=${sortBy}`, {
+      const actor = getActorId();
+      const viewerQuery = actor ? `&viewerId=${encodeURIComponent(actor)}` : '';
+      const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}&sort=${sortBy}${viewerQuery}`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
         },

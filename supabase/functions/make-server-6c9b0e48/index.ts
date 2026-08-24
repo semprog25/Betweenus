@@ -13,6 +13,22 @@ import {
   isProductionRuntime,
   resolveActorId,
   resolveAuthenticatedActorId,
+  requireSelfUserId,
+  isValidAnonymousActorId,
+  isSafeKvKeySegment,
+  clampLimit,
+  validateContentLength,
+  rateLimitOrReject,
+  toPublicPost,
+  toPublicAuthUser,
+  resolveOptionalViewerId,
+  getAuthUser,
+  MAX_POST_CONTENT_LENGTH,
+  MAX_REPLY_CONTENT_LENGTH,
+  MAX_JOURNAL_CONTENT_LENGTH,
+  MAX_CHECKIN_NOTE_LENGTH,
+  DEFAULT_FEED_LIMIT,
+  MAX_FEED_LIMIT,
 } from "./security.tsx";
 
 const app = new Hono();
@@ -113,11 +129,17 @@ app.post("/make-server-6c9b0e48/check-ins", async (c) => {
     if (authResult.error) return authResult.error;
     const user = authResult.user!;
 
+    const rateLimited = rateLimitOrReject(c, "check-ins", 60, 60_000);
+    if (rateLimited) return rateLimited;
+
     const body = await c.req.json();
     const { date, mainMood, subMood, emoji, color, note, activities } = body;
 
     if (!mainMood || !subMood) {
       return c.json({ error: "Missing required fields" }, 400);
+    }
+    if (typeof note === "string" && note.length > MAX_CHECKIN_NOTE_LENGTH) {
+      return c.json({ error: `Note exceeds maximum length of ${MAX_CHECKIN_NOTE_LENGTH}` }, 400);
     }
 
     const checkInId = generateId();
@@ -172,18 +194,22 @@ app.post("/make-server-6c9b0e48/journal", async (c) => {
     if (authResult.error) return authResult.error;
     const user = authResult.user!;
 
+    const rateLimited = rateLimitOrReject(c, "journal", 40, 60_000);
+    if (rateLimited) return rateLimited;
+
     const body = await c.req.json();
     const { content, activities, mood } = body;
 
-    if (!content) {
-      return c.json({ error: "Content is required" }, 400);
+    const contentCheck = validateContentLength(content, MAX_JOURNAL_CONTENT_LENGTH);
+    if (!contentCheck.ok) {
+      return c.json({ error: contentCheck.error }, 400);
     }
 
     const entryId = generateId();
     const entry = {
       id: entryId,
       ownerId: user.id,
-      content,
+      content: contentCheck.value,
       activities: activities || [],
       mood,
       date: new Date().toISOString(),
@@ -329,21 +355,30 @@ app.post("/make-server-6c9b0e48/upload-post-image", async (c) => {
 // Create a new post
 app.post("/make-server-6c9b0e48/posts", async (c) => {
   try {
-    const authResult = await requireAuth(c);
-    const authenticatedUser = authResult.user;
+    const rateLimited = rateLimitOrReject(c, "posts-create", 20, 60_000);
+    if (rateLimited) return rateLimited;
 
+    const authenticatedUser = await getAuthUser(c);
     const body = await c.req.json();
     const { content, mood, isAnonymous, languages, userId, categories, imageUrl, imageAspect } = body;
 
-    if (!content) {
-      return c.json({ error: "Content is required" }, 400);
+    const contentCheck = validateContentLength(content, MAX_POST_CONTENT_LENGTH);
+    if (!contentCheck.ok) {
+      return c.json({ error: contentCheck.error }, 400);
     }
 
-    if (userId && authenticatedUser && !assertMatchingUserId(authenticatedUser.id, userId)) {
-      return c.json({ error: "Unauthorized userId" }, 403);
+    let resolvedUserId: string | null = null;
+    if (authenticatedUser) {
+      if (userId && !assertMatchingUserId(authenticatedUser.id, userId)) {
+        return c.json({ error: "Unauthorized userId" }, 403);
+      }
+      resolvedUserId = authenticatedUser.id;
+    } else if (userId) {
+      if (!isValidAnonymousActorId(userId)) {
+        return c.json({ error: "Invalid anonymous actor ID" }, 401);
+      }
+      resolvedUserId = userId;
     }
-
-    const resolvedUserId = authenticatedUser?.id || userId || null;
 
     let safeImageUrl: string | null = null;
     if (imageUrl) {
@@ -363,15 +398,41 @@ app.post("/make-server-6c9b0e48/posts", async (c) => {
       safeImageUrl = imageUrl;
     }
 
+    // Enforce monthly limits before writing (never trust client increment)
+    let subscriptionForAuthUser: any = null;
+    if (authenticatedUser) {
+      subscriptionForAuthUser = await kv.get(`subscription:${authenticatedUser.id}`) || {
+        tier: 'free',
+        credits: 0,
+        postsThisMonth: 0,
+        monthlyPostLimit: 3,
+        lastResetDate: new Date().toISOString(),
+      };
+      const lastReset = new Date(subscriptionForAuthUser.lastResetDate || 0);
+      const daysSinceReset = (Date.now() - lastReset.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceReset >= 30) {
+        subscriptionForAuthUser.postsThisMonth = 0;
+        subscriptionForAuthUser.lastResetDate = new Date().toISOString();
+      }
+      if ((subscriptionForAuthUser.postsThisMonth || 0) >= (subscriptionForAuthUser.monthlyPostLimit || 3)) {
+        return c.json({
+          error: "Monthly post limit reached. Upgrade to continue sharing.",
+          code: "POST_LIMIT_REACHED",
+          postsThisMonth: subscriptionForAuthUser.postsThisMonth,
+          monthlyPostLimit: subscriptionForAuthUser.monthlyPostLimit,
+        }, 403);
+      }
+    }
+
     const postId = generateId();
     const post = {
       id: postId,
-      content,
+      content: contentCheck.value,
       mood,
       isAnonymous: isAnonymous !== false, // Default to anonymous
       languages: languages || ['en'],
       categories: categories || ['General'], // Save categories
-      userId: resolvedUserId, // Track which user created it
+      userId: resolvedUserId, // Track which user created it (server-derived)
       imageUrl: safeImageUrl,
       imageAspect: safeImageUrl ? (imageAspect || null) : null,
       upvotes: 0,
@@ -390,8 +451,14 @@ app.post("/make-server-6c9b0e48/posts", async (c) => {
       await kv.set(`user-post:${resolvedUserId}:${postId}`, post);
     }
 
+    if (authenticatedUser && subscriptionForAuthUser) {
+      subscriptionForAuthUser.postsThisMonth = (subscriptionForAuthUser.postsThisMonth || 0) + 1;
+      subscriptionForAuthUser.updatedAt = new Date().toISOString();
+      await kv.set(`subscription:${authenticatedUser.id}`, subscriptionForAuthUser);
+    }
+
     console.log(`Post created: ${postId}${resolvedUserId ? ` by user: ${resolvedUserId}` : ''} with categories: ${categories?.join(', ')}`);
-    return c.json({ success: true, post });
+    return c.json({ success: true, post: toPublicPost(post, resolvedUserId) });
   } catch (error) {
     console.error("Error creating post:", error);
     return c.json({ error: "Failed to create post" }, 500);
@@ -421,15 +488,17 @@ app.get("/make-server-6c9b0e48/posts", async (c) => {
     const language = c.req.query("language"); // Single language or comma-separated: "en" or "en,es,zh"
     const excludeIds = c.req.query("exclude"); // Comma-separated list of post IDs to exclude
     const sortBy = c.req.query("sort"); // 'controversial', 'trending', 'newest', 'random'
+    const viewerId = await resolveOptionalViewerId(c);
     const posts = await kv.getByPrefix("post:");
     
     // Filter out spam-hidden posts (flagged by trusted users)
-    let filteredPosts = (posts || []).filter((post: any) => !post.hiddenAt);
+    let filteredPosts = (posts || []).filter((post: any) => !post.hiddenAt && !post.deletedAt);
     if (language && language !== 'all') {
       const userLanguages = (typeof language === 'string' ? language : String(language))
         .split(',')
         .map((l: string) => l.trim().toLowerCase())
-        .filter(Boolean);
+        .filter(Boolean)
+        .slice(0, 20);
       if (userLanguages.length > 0) {
         filteredPosts = filteredPosts.filter((post: any) => 
           post.languages && Array.isArray(post.languages) &&
@@ -440,9 +509,11 @@ app.get("/make-server-6c9b0e48/posts", async (c) => {
       }
     }
 
-    // Exclude already seen posts
+    // Exclude already seen posts (cap exclude list to prevent abuse)
     if (excludeIds) {
-      const excludeSet = new Set(excludeIds.split(','));
+      const excludeSet = new Set(
+        String(excludeIds).split(',').map((id) => id.trim()).filter(Boolean).slice(0, 200),
+      );
       filteredPosts = filteredPosts.filter((post: any) => !excludeSet.has(post.id));
     }
 
@@ -483,17 +554,11 @@ app.get("/make-server-6c9b0e48/posts", async (c) => {
         break;
     }
 
-    // Remove internal scoring fields
-    filteredPosts = filteredPosts.map((post: any) => {
+    const limit = clampLimit(c.req.query("limit"), DEFAULT_FEED_LIMIT, MAX_FEED_LIMIT);
+    filteredPosts = filteredPosts.slice(0, limit).map((post: any) => {
       const { _controversy, _trending, _totalVotes, _replyCount, ...cleanPost } = post;
-      return cleanPost;
+      return toPublicPost(cleanPost, viewerId);
     });
-
-    const limitParam = c.req.query("limit");
-    const limit = limitParam ? Math.min(parseInt(String(limitParam), 10) || 25, 50) : filteredPosts.length;
-    if (limit > 0 && filteredPosts.length > limit) {
-      filteredPosts = filteredPosts.slice(0, limit);
-    }
 
     return c.json({ posts: filteredPosts });
   } catch (error) {
@@ -515,13 +580,9 @@ app.get("/make-server-6c9b0e48/posts/:postId", async (c) => {
       return c.json({ error: "Story not found" }, 404)
     }
 
-    const replies = Array.isArray((post as any).replies) ? (post as any).replies : []
+    const viewerId = await resolveOptionalViewerId(c);
     return c.json({
-      post: {
-        ...(post as object),
-        replies,
-        replyCount: replies.length,
-      },
+      post: toPublicPost(post, viewerId),
     })
   } catch (error) {
     console.error("Error fetching post:", error)
@@ -529,49 +590,49 @@ app.get("/make-server-6c9b0e48/posts/:postId", async (c) => {
   }
 })
 
-// Edit a post (for Community tab)
+// Edit a post (owner-only; prefer JWT edit endpoint for production edits)
 app.put("/make-server-6c9b0e48/community/posts/:postId", async (c) => {
   try {
+    const authResult = await requireAuth(c);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user!;
+
     const postId = c.req.param("postId");
     const body = await c.req.json();
-    const { content } = body;
-
-    if (!content || !content.trim()) {
-      return c.json({ error: "Content is required" }, 400);
+    const contentCheck = validateContentLength(body?.content, MAX_POST_CONTENT_LENGTH);
+    if (!contentCheck.ok) {
+      return c.json({ error: contentCheck.error }, 400);
     }
 
-    // Get existing post
     const post = await kv.get(`post:${postId}`);
-    
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    // Check if post is within 5 minutes old (300000ms)
+    if (post.userId !== user.id) {
+      return c.json({ error: "Unauthorized - you can only edit your own posts" }, 403);
+    }
+
     const postDate = new Date(post.createdAt);
     const minutesSincePost = (Date.now() - postDate.getTime()) / (1000 * 60);
-    
     if (minutesSincePost > 5) {
       return c.json({ error: "Post can only be edited within 5 minutes of creation" }, 403);
     }
 
-    // Update the post
     const updatedPost = {
       ...post,
-      content: content.trim(),
+      content: contentCheck.value,
       isEdited: true,
       editedAt: new Date().toISOString(),
     };
 
     await kv.set(`post:${postId}`, updatedPost);
-    
-    // Also update user-post if it exists
     if (post.userId) {
       await kv.set(`user-post:${post.userId}:${postId}`, updatedPost);
     }
 
-    console.log(`Post edited: ${postId}`);
-    return c.json({ success: true, post: updatedPost });
+    console.log(`Post edited: ${postId} by ${user.id}`);
+    return c.json({ success: true, post: toPublicPost(updatedPost, user.id) });
   } catch (error) {
     console.error("Error editing post:", error);
     return c.json({ error: "Failed to edit post" }, 500);
@@ -655,35 +716,38 @@ app.put("/make-server-6c9b0e48/posts/:postId/likes", async (c) => {
   }
 });
 
-// Update post privacy (for anonymity management)
+// Update post privacy (owner-only)
 app.patch("/make-server-6c9b0e48/posts/:postId/privacy", async (c) => {
   try {
+    const authResult = await requireAuth(c);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user!;
+
     const postId = c.req.param("postId");
     const body = await c.req.json();
     const { isAnonymous } = body;
 
-    // Get existing post
     const post = await kv.get(`post:${postId}`);
-    
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    // Update the post privacy setting
+    if (post.userId !== user.id) {
+      return c.json({ error: "Unauthorized - you can only change privacy on your own posts" }, 403);
+    }
+
     const updatedPost = {
       ...post,
       isAnonymous: isAnonymous === true || isAnonymous === false ? isAnonymous : true,
     };
 
     await kv.set(`post:${postId}`, updatedPost);
-    
-    // Also update user-post if it exists
     if (post.userId) {
       await kv.set(`user-post:${post.userId}:${postId}`, updatedPost);
     }
 
     console.log(`Post privacy updated: ${postId} - isAnonymous: ${updatedPost.isAnonymous}`);
-    return c.json({ success: true, post: updatedPost });
+    return c.json({ success: true, post: toPublicPost(updatedPost, user.id) });
   } catch (error) {
     console.error("Error updating post privacy:", error);
     return c.json({ error: "Failed to update post privacy" }, 500);
@@ -693,6 +757,9 @@ app.patch("/make-server-6c9b0e48/posts/:postId/privacy", async (c) => {
 // Upvote a post
 app.post("/make-server-6c9b0e48/posts/:postId/upvote", async (c) => {
   try {
+    const rateLimited = rateLimitOrReject(c, "vote", 120, 60_000);
+    if (rateLimited) return rateLimited;
+
     const postId = c.req.param("postId");
     const body = await c.req.json().catch(() => ({}));
     const { userId: requestedUserId } = body;
@@ -948,12 +1015,16 @@ app.post("/make-server-6c9b0e48/community/posts/:postId/replies/:replyId/update-
 // Reply to a post
 app.post("/make-server-6c9b0e48/posts/:postId/reply", async (c) => {
   try {
+    const rateLimited = rateLimitOrReject(c, "reply", 40, 60_000);
+    if (rateLimited) return rateLimited;
+
     const postId = c.req.param("postId");
     const body = await c.req.json();
     const { content, userId: requestedUserId } = body;
 
-    if (!content) {
-      return c.json({ error: "Reply content is required" }, 400);
+    const contentCheck = validateContentLength(content, MAX_REPLY_CONTENT_LENGTH);
+    if (!contentCheck.ok) {
+      return c.json({ error: contentCheck.error }, 400);
     }
 
     const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
@@ -968,7 +1039,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply", async (c) => {
     const replyId = generateId();
     const reply = {
       id: replyId,
-      content,
+      content: contentCheck.value,
       userId: userId || null, // Track who replied
       createdAt: new Date().toISOString(),
       isAnonymous: true,
@@ -1130,10 +1201,11 @@ app.put("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
     const postId = c.req.param("postId");
     const replyId = c.req.param("replyId");
     const body = await c.req.json();
-    const { content } = body;
+    const { content, userId: requestedUserId } = body;
 
-    if (!content || !content.trim()) {
-      return c.json({ error: "Content is required" }, 400);
+    const contentCheck = validateContentLength(content, MAX_REPLY_CONTENT_LENGTH);
+    if (!contentCheck.ok) {
+      return c.json({ error: contentCheck.error }, 400);
     }
 
     // Get existing post
@@ -1150,7 +1222,7 @@ app.put("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
       return c.json({ error: "Reply not found" }, 404);
     }
 
-    const { actorId, error: actorError } = await resolveActorId(c);
+    const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
     if (actorError) return actorError;
 
     if (post.replies[replyIndex].userId !== actorId) {
@@ -1168,7 +1240,7 @@ app.put("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
     // Update the reply
     post.replies[replyIndex] = {
       ...post.replies[replyIndex],
-      content: content.trim(),
+      content: contentCheck.value,
       isEdited: true,
       editedAt: new Date().toISOString(),
     };
@@ -1181,7 +1253,7 @@ app.put("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
     }
 
     console.log(`Reply edited: ${replyId} on post ${postId}`);
-    return c.json({ success: true, reply: post.replies[replyIndex] });
+    return c.json({ success: true, reply: toPublicPost({ ...post, replies: [post.replies[replyIndex]] }, actorId).replies?.[0] });
   } catch (error) {
     console.error("Error editing reply:", error);
     return c.json({ error: "Failed to edit reply" }, 500);
@@ -1193,6 +1265,8 @@ app.delete("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
   try {
     const postId = c.req.param("postId");
     const replyId = c.req.param("replyId");
+    const body = await c.req.json().catch(() => ({}));
+    const requestedUserId = body?.userId;
 
     // Get existing post
     const post = await kv.get(`post:${postId}`);
@@ -1208,7 +1282,7 @@ app.delete("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
       return c.json({ error: "Reply not found" }, 404);
     }
 
-    const { actorId, error: actorError } = await resolveActorId(c);
+    const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
     if (actorError) return actorError;
 
     if (post.replies[replyIndex].userId !== actorId) {
@@ -1238,6 +1312,9 @@ app.delete("/make-server-6c9b0e48/posts/:postId/reply/:replyId", async (c) => {
 // Sign up with email and password
 app.post("/make-server-6c9b0e48/auth/signup", async (c) => {
   try {
+    const rateLimited = rateLimitOrReject(c, "auth-signup", 10, 60_000);
+    if (rateLimited) return rateLimited;
+
     const body = await c.req.json();
     const { email, password, name, languages } = body;
 
@@ -1320,6 +1397,9 @@ app.post("/make-server-6c9b0e48/auth/signup", async (c) => {
 // Sign in with email and password
 app.post("/make-server-6c9b0e48/auth/signin", async (c) => {
   try {
+    const rateLimited = rateLimitOrReject(c, "auth-signin", 20, 60_000);
+    if (rateLimited) return rateLimited;
+
     const body = await c.req.json();
     const { email, password } = body;
 
@@ -1408,7 +1488,10 @@ app.post("/make-server-6c9b0e48/auth/save-logout-data", async (c) => {
     }
 
     const body = await c.req.json();
-    const { userId, logoutTimestamp, sessionData } = body;
+    const { logoutTimestamp, sessionData } = body;
+
+    // Never trust body userId — always use JWT identity
+    const userId = user.id;
 
     // Update user_profiles with logout timestamp
     const { error: updateError } = await supabase
@@ -1467,7 +1550,7 @@ app.get("/make-server-6c9b0e48/auth/user", async (c) => {
 
     return c.json({ 
       success: true, 
-      user: data.user,
+      user: toPublicAuthUser(data.user),
     });
   } catch (error) {
     console.error("Get user error:", error);
@@ -1769,28 +1852,15 @@ app.post("/make-server-6c9b0e48/auth/send-welcome-email", async (c) => {
 
 // ==================== USER STATS ====================
 
-// Get user stats (for Profile tab)
+// Get user stats (for Profile tab) — self only; never trust query userId
 app.get("/make-server-6c9b0e48/stats", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      // Return global stats if no userId provided
-      const checkIns = await kv.getByPrefix("check-in:");
-      const journals = await kv.getByPrefix("journal:");
-      const posts = await kv.getByPrefix("post:");
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
 
-      const stats = {
-        totalCheckIns: checkIns?.length || 0,
-        totalJournals: journals?.length || 0,
-        totalPosts: posts?.length || 0,
-        totalUpvotesReceived: posts?.reduce((sum: number, post: any) => 
-          sum + (post.upvotes || 0), 0) || 0,
-        totalRepliesGiven: posts?.reduce((sum: number, post: any) => 
-          sum + (post.replies?.length || 0), 0) || 0,
-      };
-
-      return c.json({ stats });
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
     }
     
     // Get user-specific stats
@@ -1814,12 +1884,14 @@ app.get("/make-server-6c9b0e48/stats", async (c) => {
   }
 });
 
-// Get user reputation and trusted status (for spam-flagging permission)
+// Get user reputation and trusted status (for spam-flagging permission) — self only
 app.get("/make-server-6c9b0e48/user-reputation", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
     }
     const { score, isTrusted } = await getUserReputation(userId);
     return c.json({ score, isTrusted, threshold: TRUSTED_USER_THRESHOLD });
@@ -1829,13 +1901,14 @@ app.get("/make-server-6c9b0e48/user-reputation", async (c) => {
   }
 });
 
-// Get user level and achievement data (NEW)
+// Get user level and achievement data — self only
 app.get("/make-server-6c9b0e48/user-level", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
     }
     
     // Get user stats
@@ -1977,13 +2050,14 @@ app.get("/make-server-6c9b0e48/user-level", async (c) => {
   }
 });
 
-// Get user's posts/secrets
+// Get user's posts/secrets — self only
 app.get("/make-server-6c9b0e48/user-posts", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
     }
     
     const userPosts = await kv.getByPrefix(`user-post:${userId}:`);
@@ -1993,20 +2067,23 @@ app.get("/make-server-6c9b0e48/user-posts", async (c) => {
       (b.timestamp || 0) - (a.timestamp || 0)
     );
 
-    return c.json({ posts: sortedPosts });
+    return c.json({
+      posts: sortedPosts.map((post: any) => toPublicPost(post, userId)),
+    });
   } catch (error) {
     console.error("Error fetching user posts:", error);
     return c.json({ error: "Failed to fetch user posts" }, 500);
   }
 });
 
-// Get user's replies
+// Get user's replies — self only
 app.get("/make-server-6c9b0e48/user-replies", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
     }
     
     const userReplies = await kv.getByPrefix(`user-reply:${userId}:`);
@@ -2025,6 +2102,9 @@ app.get("/make-server-6c9b0e48/user-replies", async (c) => {
 // Save waitlist email
 app.post("/make-server-6c9b0e48/waitlist", async (c) => {
   try {
+    const rateLimited = rateLimitOrReject(c, "waitlist", 10, 60_000);
+    if (rateLimited) return rateLimited;
+
     const body = await c.req.json();
     const { email, source } = body;
 
@@ -2144,7 +2224,7 @@ app.delete("/make-server-6c9b0e48/journal/:entryId", async (c) => {
       return c.json({ error: "Journal entry not found" }, 404);
     }
 
-    if (entry.ownerId && entry.ownerId !== user.id) {
+    if (entry.ownerId !== user.id) {
       return c.json({ error: "Unauthorized" }, 403);
     }
 
@@ -2160,14 +2240,12 @@ app.delete("/make-server-6c9b0e48/journal/:entryId", async (c) => {
 
 // ==================== MONETIZATION & PREMIUM ====================
 
-// Get user's subscription and premium status
+// Get user's subscription and premium status — self only
 app.get("/make-server-6c9b0e48/subscription", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
-    }
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
     
     // Get user's subscription data
     const subscription = await kv.get(`subscription:${userId}`) || {
@@ -2198,14 +2276,11 @@ app.post("/make-server-6c9b0e48/subscription/upgrade", async (c) => {
     const user = authResult.user!;
 
     const body = await c.req.json();
-    const { userId, tier } = body; // tier: 'premium' or 'pro'
+    const { tier } = body; // tier: 'premium' or 'pro'
+    const userId = user.id;
     
-    if (!userId || !tier) {
-      return c.json({ error: "userId and tier are required" }, 400);
-    }
-
-    if (!assertMatchingUserId(user.id, userId)) {
-      return c.json({ error: "Unauthorized userId" }, 403);
+    if (!tier) {
+      return c.json({ error: "tier is required" }, 400);
     }
 
     if (isProductionRuntime()) {
@@ -2274,14 +2349,11 @@ app.post("/make-server-6c9b0e48/subscription/buy-credits", async (c) => {
     const user = authResult.user!;
 
     const body = await c.req.json();
-    const { userId, amount } = body;
+    const { amount } = body;
+    const userId = user.id;
     
-    if (!userId || !amount) {
-      return c.json({ error: "userId and amount are required" }, 400);
-    }
-
-    if (!assertMatchingUserId(user.id, userId)) {
-      return c.json({ error: "Unauthorized userId" }, 403);
+    if (!amount || typeof amount !== "number" || amount <= 0 || amount > 1000) {
+      return c.json({ error: "Valid amount is required" }, 400);
     }
 
     if (isProductionRuntime()) {
@@ -2364,6 +2436,13 @@ app.post("/make-server-6c9b0e48/posts/:postId/edit", async (c) => {
       post.imageUrl = null;
       post.imageAspect = null;
     } else if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      const path = extractPostImagePath(imageUrl);
+      if (!path) {
+        return c.json({ error: "imageUrl must be a Between Us post-images URL" }, 400);
+      }
+      if (!path.startsWith(`${user.id}/`)) {
+        return c.json({ error: "Unauthorized image ownership" }, 403);
+      }
       if (post.imageUrl && post.imageUrl !== imageUrl) {
         await deletePostImageIfOwned(post.imageUrl, user.id);
       }
@@ -2476,14 +2555,12 @@ app.get("/make-server-6c9b0e48/admin/reports", async (c) => {
   }
 });
 
-// Check if user can post (based on monthly limit)
+// Check if user can post (based on monthly limit) — self only
 app.get("/make-server-6c9b0e48/subscription/can-post", async (c) => {
   try {
-    const userId = c.req.query("userId");
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
-    }
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
     
     const subscription = await kv.get(`subscription:${userId}`) || {
       tier: 'free',
@@ -2520,14 +2597,16 @@ app.get("/make-server-6c9b0e48/subscription/can-post", async (c) => {
   }
 });
 
-// Increment post count when user posts
+// Increment post count — self only (server also increments on POST /posts)
 app.post("/make-server-6c9b0e48/subscription/increment-post", async (c) => {
   try {
-    const body = await c.req.json();
-    const { userId } = body;
-    
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+
+    const body = await c.req.json().catch(() => ({}));
+    if (body?.userId && !assertMatchingUserId(userId, body.userId)) {
+      return c.json({ error: "Unauthorized userId" }, 403);
     }
     
     const subscription = await kv.get(`subscription:${userId}`) || {
