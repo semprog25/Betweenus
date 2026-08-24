@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from './components/ThemeProvider';
 import { LanguageProvider, useLanguage } from './components/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { getSession, getUserProfile, type PendingAuthAction } from './utils/auth';
+import { syncUserTimezone } from './utils/timezone-sync';
 import { registerDeepLinkHandlers, consumeOpenStoryId } from './utils/deep-links';
 import { useAchievementNotifications } from './hooks/useAchievementNotifications';
 import { toast } from 'sonner@2.0.3';
@@ -177,6 +178,7 @@ function NativeAppContent() {
         // Only fetch if we have a valid access token
         if (session.accessToken) {
           try {
+            await syncUserTimezone()
             console.log('Fetching fresh user profile from server...');
             const freshProfile = await getUserProfile();
             if (freshProfile) {

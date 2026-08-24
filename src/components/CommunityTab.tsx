@@ -58,13 +58,34 @@ interface CommunityPost {
 }
 
 interface CommunityTabProps {
-  selectedLanguages: string[];
+  selectedLanguages: string[]
+  initialViewMode?: 'all' | 'saved'
+  webShell?: boolean
+  onStreakActivity?: () => void
 }
 
 const COMMUNITY_SEEN_POSTS_STORAGE_KEY = 'between_us_community_seen_posts';
 const MAX_TRACKED_SEEN_POSTS = 250;
 
-export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
+function getCommunityAuthHeaders(): Record<string, string> {
+  const session = getSession()
+  const token = session?.accessToken || publicAnonKey
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  }
+}
+
+async function parseCommunityResponse(response: Response) {
+  return response.json().catch(() => null)
+}
+
+export function CommunityTab({
+  selectedLanguages,
+  initialViewMode = 'all',
+  webShell = false,
+  onStreakActivity,
+}: CommunityTabProps) {
   const { t } = useLanguage();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [freshnessScores, setFreshnessScores] = useState<Record<string, number>>({});
@@ -72,7 +93,7 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'newest' | 'trending' | 'controversial'>('newest');
-  const [viewMode, setViewMode] = useState<'all' | 'saved'>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'saved'>(initialViewMode);
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
@@ -100,6 +121,10 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       window.removeEventListener('focus', syncActorId);
     };
   }, []);
+
+  useEffect(() => {
+    setViewMode(initialViewMode)
+  }, [initialViewMode])
 
   // Load trusted user status for spam-flagging (Reddit-style moderation)
   useEffect(() => {
@@ -399,10 +424,7 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
       const response = await fetch(`${baseUrl}/posts/${postId}/upvote`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: getCommunityAuthHeaders(),
         body: JSON.stringify({ userId }),
       });
 
@@ -410,7 +432,10 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
         console.error('Failed to upvote:', await response.text());
         setPosts(previousPosts); // Revert on failure
         toast.error(t('community.voteFailed'));
+        return
       }
+      const result = await parseCommunityResponse(response)
+      if (result?.streak) onStreakActivity?.()
     } catch (error) {
       console.error('Error upvoting post:', error);
       setPosts(previousPosts); // Revert on error
@@ -531,10 +556,7 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
       const response = await fetch(`${baseUrl}/posts/${postId}/reply/${replyId}/upvote`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: getCommunityAuthHeaders(),
         body: JSON.stringify({ userId }),
       });
 
@@ -542,7 +564,10 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
         console.error('Failed to upvote reply:', await response.text());
         setPosts(previousPosts); // Revert
         toast.error(t('community.voteFailed'));
+        return
       }
+      const result = await parseCommunityResponse(response)
+      if (result?.streak) onStreakActivity?.()
     } catch (error) {
       console.error('Error upvoting reply:', error);
       setPosts(previousPosts); // Revert
@@ -655,10 +680,7 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
       const response = await fetch(`${baseUrl}/posts/${postId}/reply`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: getCommunityAuthHeaders(),
         body: JSON.stringify({
           content: content,
           isAnonymous: true,
@@ -667,8 +689,10 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
       });
 
       if (response.ok) {
+        const result = await parseCommunityResponse(response)
         toast.success(t('community.reply.posted'));
         setReplyText({ ...replyText, [postId]: '' });
+        if (result?.streak) onStreakActivity?.()
         
         // Refresh posts to show new reply
         await loadPosts();
@@ -733,7 +757,7 @@ export function CommunityTab({ selectedLanguages }: CommunityTabProps) {
     });
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-hide">
+    <div className={`h-full overflow-y-auto scrollbar-hide ${webShell ? 'bu-web-tab-content' : ''}`}>
       <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
         {/* Header */}
         <div className="bg-gradient-to-br from-purple-100 to-fuchsia-100 dark:from-purple-900/30 dark:to-fuchsia-900/30 rounded-3xl p-6 border border-purple-200 dark:border-purple-800">

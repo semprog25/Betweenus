@@ -15,7 +15,7 @@ import { getSession } from '../utils/auth';
 
 const GUIDELINES_KEY = 'between_us_guidelines_accepted';
 
-export function ShareTab() {
+export function ShareTab({ webShell = false, onStreakActivity }: { webShell?: boolean; onStreakActivity?: () => void }) {
   const { t, language } = useLanguage();
   const [thought, setThought] = useState('');
   const [isSharing, setIsSharing] = useState(false);
@@ -211,7 +211,7 @@ export function ShareTab() {
         imageAspect = getImageAspect(compressed.width, compressed.height);
       }
 
-      await createPost({
+      const result = await createPost({
         content: thought,
         languages: [language],
         isAnonymous: isAnonymous,
@@ -224,6 +224,8 @@ export function ShareTab() {
       if (session?.user?.id) {
         await loadLimits();
       }
+
+      if (result?.streak) onStreakActivity?.()
       
       toast.success(isAnonymous ? t('share.success') : t('share.publicSuccess'));
       setThought('');

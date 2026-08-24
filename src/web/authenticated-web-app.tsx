@@ -7,8 +7,15 @@ import { Toaster } from '../components/ui/sonner'
 import { useTheme } from '../components/ThemeProvider'
 import { useLanguage } from '../components/LanguageContext'
 import { getUserProfile, signOut, type User } from '../utils/auth'
+import { syncUserTimezone } from '../utils/timezone-sync'
 import { notifyAuthChanged } from './use-auth-state'
-import { WebAppShell, type AppTab } from './web-app-shell'
+import {
+  WebAppShell,
+  navCommunityView,
+  navToTab,
+  type WebNavId,
+} from './web-app-shell'
+import { useDailyStreakRefresh } from './daily-streak-panel'
 import { toast } from 'sonner@2.0.3'
 import './web.css'
 
@@ -19,10 +26,23 @@ interface AuthenticatedWebAppProps {
   user: User | null
 }
 
+function pathToNav(path: string): WebNavId | null {
+  if (path.startsWith('/app/write')) return 'write'
+  if (path.startsWith('/app/stories')) return 'stories'
+  if (path.startsWith('/app/saved')) return 'saved'
+  if (path.startsWith('/app/activity')) return 'activity'
+  if (path.startsWith('/app/messages')) return 'messages'
+  if (path.startsWith('/app/settings')) return 'settings'
+  if (path.startsWith('/app/profile')) return 'profile'
+  if (path === '/app' || path.startsWith('/app/')) return 'home'
+  return null
+}
+
 export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   const { theme } = useTheme()
   const { setLanguage } = useLanguage()
-  const [activeTab, setActiveTab] = useState<AppTab>('discover')
+  const { refreshKey, refreshStreak } = useDailyStreakRefresh()
+  const [activeNav, setActiveNav] = useState<WebNavId>('home')
   const [userName, setUserName] = useState(user?.user_metadata?.name || 'Friend')
   const [profilePicture, setProfilePicture] = useState(user?.user_metadata?.avatar_url || '')
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => {
@@ -44,6 +64,10 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
     document.documentElement.classList.remove('light')
     document.documentElement.classList.add('dark')
   }, [])
+
+  useEffect(() => {
+    void syncUserTimezone()
+  }, [user?.id])
 
   useEffect(() => {
     const load = async () => {
@@ -69,16 +93,13 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
         } catch {
           // ignore
         }
-        setActiveTab('community')
+        setActiveNav('stories')
       }
-    } else if (path.startsWith('/app/write') || path === '/app/write') {
-      setActiveTab('share')
-    } else if (path.startsWith('/app/profile') || path.startsWith('/app/settings')) {
-      setActiveTab('profile')
-    } else if (path.startsWith('/app/stories')) {
-      setActiveTab('community')
+    } else {
+      const navFromPath = pathToNav(path)
+      if (navFromPath) setActiveNav(navFromPath)
     }
-    if (path === '/' || path.startsWith('/app')) {
+    if (path === '/' || path.startsWith('/app') || path.startsWith('/story/')) {
       window.history.replaceState({}, '', '/app')
     }
   }, [])
@@ -100,8 +121,15 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
     toast.message('Signed out')
   }
 
+  const handleNavChange = (nav: WebNavId) => {
+    setActiveNav(nav)
+  }
+
+  const activeTab = navToTab(activeNav)
+  const communityView = navCommunityView(activeNav)
+
   const tabFallback = (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex h-full items-center justify-center py-16">
       <Loader2 className="h-8 w-8 animate-spin text-fuchsia-400" aria-hidden="true" />
     </div>
   )
@@ -109,29 +137,41 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   return (
     <div className="dark h-screen">
       <WebAppShell
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        activeNav={activeNav}
+        setActiveNav={handleNavChange}
         user={user}
-        onSignOut={handleSignOut}
+        profilePicture={profilePicture}
+        streakRefreshKey={refreshKey}
       >
         {activeTab === 'discover' && (
           <Suspense fallback={tabFallback}>
-            <DiscoverTab selectedLanguages={selectedLanguages} />
+            <DiscoverTab
+              selectedLanguages={selectedLanguages}
+              webShell
+              onStreakActivity={refreshStreak}
+            />
           </Suspense>
         )}
         {activeTab === 'share' && (
           <Suspense fallback={tabFallback}>
-            <ShareTab />
+            <ShareTab webShell onStreakActivity={refreshStreak} />
           </Suspense>
         )}
         {activeTab === 'checkin' && (
           <CheckInTab
             userName={userName}
             profilePicture={profilePicture}
-            onNavigateToProfile={() => setActiveTab('profile')}
+            onNavigateToProfile={() => setActiveNav('profile')}
           />
         )}
-        {activeTab === 'community' && <CommunityTab selectedLanguages={selectedLanguages} />}
+        {activeTab === 'community' && (
+          <CommunityTab
+            selectedLanguages={selectedLanguages}
+            initialViewMode={communityView}
+            webShell
+            onStreakActivity={refreshStreak}
+          />
+        )}
         {activeTab === 'profile' && (
           <ProfileTab
             selectedLanguages={selectedLanguages}

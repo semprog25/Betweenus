@@ -62,13 +62,15 @@ interface Post {
 
 interface DiscoverTabProps {
   selectedLanguages: string[]
+  webShell?: boolean
+  onStreakActivity?: () => void
 }
 
 type DiscoverFilter = 'trending' | 'newest' | 'controversial' | 'random'
 
 const MAX_POSTS = 25
 
-export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
+export function DiscoverTab({ selectedLanguages, webShell = false, onStreakActivity }: DiscoverTabProps) {
   const { t } = useLanguage()
   const [posts, setPosts] = useState<Post[]>([])
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null)
@@ -183,7 +185,9 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
     if (!result.success) {
       fetchDiscoverPosts(currentFilter)
       toast.error(t('discover.voteError'))
+      return
     }
+    if (result.streak && direction === 'up') onStreakActivity?.()
   }
 
   const handleReplyVote = async (postId: string, replyId: string, direction: 'up' | 'down') => {
@@ -234,10 +238,11 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
     }))
 
     const endpoint = direction === 'up' ? 'upvote' : 'downvote'
-    await callServer(`/posts/${postId}/reply/${replyId}/${endpoint}`, {
+    const result = await callServer(`/posts/${postId}/reply/${replyId}/${endpoint}`, {
       method: 'POST',
       body: JSON.stringify({ userId: actor }),
     })
+    if (result.streak && direction === 'up') onStreakActivity?.()
   }
 
   const handleSubmitComment = async (postId: string) => {
@@ -264,6 +269,7 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
         }))
         setReplyDrafts((prev) => ({ ...prev, [postId]: '' }))
         toast.success(t('discover.commentPosted'))
+        if (result.streak) onStreakActivity?.()
       } else {
         toast.error(t('discover.commentError'))
       }
@@ -308,16 +314,23 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
     }
   }
 
-  const filters: { id: DiscoverFilter; icon: typeof Flame; label: string }[] = [
-    { id: 'trending', icon: TrendingUp, label: t('discover.filter.trending') },
-    { id: 'newest', icon: Sparkles, label: t('discover.filter.newest') },
-    { id: 'controversial', icon: Flame, label: t('discover.filter.hot') },
-    { id: 'random', icon: Shuffle, label: t('discover.filter.random') },
-  ]
+  const filters: { id: DiscoverFilter; icon: typeof Flame; label: string }[] = webShell
+    ? [
+        { id: 'trending', icon: TrendingUp, label: 'Trending' },
+        { id: 'newest', icon: Sparkles, label: 'Newest' },
+        { id: 'controversial', icon: Flame, label: 'Most Discussed' },
+      ]
+    : [
+        { id: 'trending', icon: TrendingUp, label: t('discover.filter.trending') },
+        { id: 'newest', icon: Sparkles, label: t('discover.filter.newest') },
+        { id: 'controversial', icon: Flame, label: t('discover.filter.hot') },
+        { id: 'random', icon: Shuffle, label: t('discover.filter.random') },
+      ]
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-hide pb-24">
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+    <div className={`h-full overflow-y-auto scrollbar-hide ${webShell ? 'bu-web-tab-content pb-8' : 'pb-24'}`}>
+      <div className={`mx-auto space-y-4 ${webShell ? 'max-w-none px-0 py-0' : 'max-w-3xl px-4 py-4'}`}>
+        {!webShell && (
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Compass className="w-5 h-5 text-purple-600 dark:text-purple-400" strokeWidth={2} />
@@ -337,8 +350,24 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
+        )}
 
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {webShell && (
+          <div className="flex items-center justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => fetchDiscoverPosts(currentFilter)}
+              disabled={isLoading}
+              aria-label={t('discover.refresh')}
+              className="shrink-0 text-zinc-400 hover:text-white"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        )}
+
+        <div className={`flex gap-2 overflow-x-auto pb-1 scrollbar-hide ${webShell ? 'bu-web-feed-filters' : ''}`}>
           {filters.map(({ id, icon: Icon, label }) => (
             <button
               key={id}

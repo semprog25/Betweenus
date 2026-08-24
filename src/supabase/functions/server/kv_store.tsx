@@ -17,6 +17,15 @@ const client = () => createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
 );
 
+/** Insert only when key is absent. Returns true when inserted, false on conflict. */
+export const insertIfAbsent = async (key: string, value: any): Promise<boolean> => {
+  const supabase = client()
+  const { error } = await supabase.from("kv_store_6c9b0e48").insert({ key, value })
+  if (!error) return true
+  if (error.code === "23505") return false
+  throw new Error(error.message)
+}
+
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
   const supabase = client()

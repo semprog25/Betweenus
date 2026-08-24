@@ -30,6 +30,11 @@ import {
   DEFAULT_FEED_LIMIT,
   MAX_FEED_LIMIT,
 } from "./security.tsx";
+import {
+  buildDailyStreakState,
+  isValidIanaTimezone,
+  registerDailyStreakActivity,
+} from "./daily-streak.tsx";
 
 const app = new Hono();
 
@@ -457,8 +462,13 @@ app.post("/make-server-6c9b0e48/posts", async (c) => {
       await kv.set(`subscription:${authenticatedUser.id}`, subscriptionForAuthUser);
     }
 
+    let streak = null;
+    if (authenticatedUser) {
+      streak = await registerDailyStreakActivity(authenticatedUser.id, "post");
+    }
+
     console.log(`Post created: ${postId}${resolvedUserId ? ` by user: ${resolvedUserId}` : ''} with categories: ${categories?.join(', ')}`);
-    return c.json({ success: true, post: toPublicPost(post, resolvedUserId) });
+    return c.json({ success: true, post: toPublicPost(post, resolvedUserId), streak });
   } catch (error) {
     console.error("Error creating post:", error);
     return c.json({ error: "Failed to create post" }, 500);
@@ -764,7 +774,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/upvote", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { userId: requestedUserId } = body;
 
-    const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
+    const { actorId, isAuthenticated, error: actorError } = await resolveActorId(c, requestedUserId);
     if (actorError) return actorError;
     const userId = actorId!;
     
@@ -786,6 +796,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/upvote", async (c) => {
       post.downvotes = Math.max(0, post.downvotes - 1);
     }
 
+    let addedUpvote = false;
     // Toggle upvote
     if (userId && post.upvotedBy.includes(userId)) {
       // Remove upvote
@@ -794,6 +805,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/upvote", async (c) => {
     } else {
       // Add upvote
       post.upvotes += 1;
+      addedUpvote = true;
       if (userId && !post.upvotedBy.includes(userId)) {
         post.upvotedBy.push(userId);
       }
@@ -806,8 +818,13 @@ app.post("/make-server-6c9b0e48/posts/:postId/upvote", async (c) => {
       await kv.set(`user-post:${post.userId}:${postId}`, post);
     }
 
+    let streak = null;
+    if (isAuthenticated && addedUpvote && userId) {
+      streak = await registerDailyStreakActivity(userId, "upvote");
+    }
+
     console.log(`Post upvoted: ${postId}`);
-    return c.json({ success: true, upvotes: post.upvotes, downvotes: post.downvotes });
+    return c.json({ success: true, upvotes: post.upvotes, downvotes: post.downvotes, streak });
   } catch (error) {
     console.error("Error upvoting post:", error);
     return c.json({ error: "Failed to upvote post" }, 500);
@@ -1027,7 +1044,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply", async (c) => {
       return c.json({ error: contentCheck.error }, 400);
     }
 
-    const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
+    const { actorId, isAuthenticated, error: actorError } = await resolveActorId(c, requestedUserId);
     if (actorError) return actorError;
     const userId = actorId!;
 
@@ -1067,8 +1084,13 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply", async (c) => {
       });
     }
 
+    let streak = null;
+    if (isAuthenticated && userId) {
+      streak = await registerDailyStreakActivity(userId, "reply");
+    }
+
     console.log(`Reply added to post: ${postId}`);
-    return c.json({ success: true, reply });
+    return c.json({ success: true, reply, streak });
   } catch (error) {
     console.error("Error adding reply:", error);
     return c.json({ error: "Failed to add reply" }, 500);
@@ -1083,7 +1105,7 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply/:replyId/upvote", async (c) 
     const body = await c.req.json().catch(() => ({}));
     const { userId: requestedUserId } = body;
 
-    const { actorId, error: actorError } = await resolveActorId(c, requestedUserId);
+    const { actorId, isAuthenticated, error: actorError } = await resolveActorId(c, requestedUserId);
     if (actorError) return actorError;
     const userId = actorId!;
     
@@ -1109,12 +1131,14 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply/:replyId/upvote", async (c) 
       reply.downvotes = Math.max(0, reply.downvotes - 1);
     }
 
+    let addedUpvote = false;
     // Toggle upvote
     if (userId && reply.upvotedBy.includes(userId)) {
       reply.upvotedBy = reply.upvotedBy.filter((id: string) => id !== userId);
       reply.upvotes = Math.max(0, reply.upvotes - 1);
     } else {
       reply.upvotes += 1;
+      addedUpvote = true;
       if (userId && !reply.upvotedBy.includes(userId)) {
         reply.upvotedBy.push(userId);
       }
@@ -1127,8 +1151,13 @@ app.post("/make-server-6c9b0e48/posts/:postId/reply/:replyId/upvote", async (c) 
       await kv.set(`user-post:${post.userId}:${postId}`, post);
     }
 
+    let streak = null;
+    if (isAuthenticated && addedUpvote && userId) {
+      streak = await registerDailyStreakActivity(userId, "reply_upvote");
+    }
+
     console.log(`Reply upvoted: ${replyId} on post ${postId}`);
-    return c.json({ success: true, upvotes: reply.upvotes, downvotes: reply.downvotes });
+    return c.json({ success: true, upvotes: reply.upvotes, downvotes: reply.downvotes, streak });
   } catch (error) {
     console.error("Error upvoting reply:", error);
     return c.json({ error: "Failed to upvote reply" }, 500);
@@ -1847,6 +1876,72 @@ app.post("/make-server-6c9b0e48/auth/send-welcome-email", async (c) => {
   } catch (error) {
     console.error("Error sending welcome email:", error);
     return c.json({ error: "Failed to send welcome email" }, 500);
+  }
+});
+
+// Sync authenticated user's IANA timezone (client-detected; server-validated)
+app.put("/make-server-6c9b0e48/auth/timezone", async (c) => {
+  try {
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+
+    const body = await c.req.json().catch(() => ({}));
+    if (body.activity_date || body.streak_count || body.previous_streak) {
+      return c.json({ error: "Invalid request fields" }, 400);
+    }
+
+    const ianaTimezone = body.iana_timezone;
+    if (!isValidIanaTimezone(ianaTimezone)) {
+      return c.json({ error: "Invalid timezone" }, 400);
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+    if (userError || !userData?.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const existing = userData.user.user_metadata?.iana_timezone;
+    if (existing === ianaTimezone) {
+      return c.json({ success: true, iana_timezone: ianaTimezone, updated: false });
+    }
+
+    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...userData.user.user_metadata,
+        iana_timezone: ianaTimezone,
+      },
+    });
+
+    if (updateError) {
+      console.error("Timezone update error:", updateError);
+      return c.json({ error: "Failed to update timezone" }, 500);
+    }
+
+    return c.json({ success: true, iana_timezone: ianaTimezone, updated: true });
+  } catch (error) {
+    console.error("Timezone sync error:", error);
+    return c.json({ error: "Failed to sync timezone" }, 500);
+  }
+});
+
+// ==================== DAILY STREAK ====================
+
+// Get daily streak state — self only; server derives user from session
+app.get("/make-server-6c9b0e48/daily-streak", async (c) => {
+  try {
+    const self = await requireSelfUserId(c);
+    if (self.error) return self.error;
+    const userId = self.userId!;
+    if (!isSafeKvKeySegment(userId)) {
+      return c.json({ error: "Invalid userId" }, 400);
+    }
+    const streak = await buildDailyStreakState(userId);
+    return c.json({ streak });
+  } catch (error) {
+    console.error("Error fetching daily streak:", error);
+    return c.json({ error: "Failed to fetch daily streak" }, 500);
   }
 });
 

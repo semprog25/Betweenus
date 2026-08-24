@@ -1,11 +1,11 @@
 import { Suspense, type ReactNode } from 'react'
 import {
+  Activity,
   Bookmark,
-  CheckCircle,
   Globe,
   Home,
   Loader2,
-  LogOut,
+  MessageSquare,
   MessageSquarePlus,
   PenSquare,
   Settings,
@@ -13,142 +13,194 @@ import {
 } from 'lucide-react'
 import logoImage from '../assets/betweenus-logo.png'
 import type { User as AuthUser } from '../utils/auth'
+import { DailyStreakPanel } from './daily-streak-panel'
+import { ImpactPanel } from './impact-panel'
+import { TrendingTopicsPanel } from './trending-topics-panel'
 
 export type AppTab = 'discover' | 'share' | 'checkin' | 'community' | 'profile'
 
+export type WebNavId =
+  | 'home'
+  | 'stories'
+  | 'write'
+  | 'activity'
+  | 'messages'
+  | 'profile'
+  | 'saved'
+  | 'settings'
+
 interface NavItem {
-  id: AppTab | 'home' | 'write' | 'settings'
+  id: WebNavId
   label: string
   icon: typeof Home
   tab: AppTab
-  disabled?: boolean
+  communityView?: 'all' | 'saved'
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: Home, tab: 'discover' },
-  { id: 'community', label: 'Stories', icon: Globe, tab: 'community' },
+  { id: 'stories', label: 'Stories', icon: Globe, tab: 'community', communityView: 'all' },
   { id: 'write', label: 'Write a Story', icon: PenSquare, tab: 'share' },
-  { id: 'checkin', label: 'Check-in', icon: CheckCircle, tab: 'checkin' },
+  { id: 'activity', label: 'Activity', icon: Activity, tab: 'checkin' },
+  { id: 'messages', label: 'Messages', icon: MessageSquare, tab: 'community', communityView: 'all' },
   { id: 'profile', label: 'Profile', icon: User, tab: 'profile' },
+  { id: 'saved', label: 'Saved', icon: Bookmark, tab: 'community', communityView: 'saved' },
   { id: 'settings', label: 'Settings', icon: Settings, tab: 'profile' },
 ]
 
+const PAGE_TITLES: Record<WebNavId, string> = {
+  home: 'Home',
+  stories: 'Stories',
+  write: 'Write a Story',
+  activity: 'Activity',
+  messages: 'Messages',
+  profile: 'Profile',
+  saved: 'Saved',
+  settings: 'Settings',
+}
+
 interface WebAppShellProps {
-  activeTab: AppTab
-  setActiveTab: (tab: AppTab) => void
+  activeNav: WebNavId
+  setActiveNav: (nav: WebNavId) => void
   user: AuthUser | null
-  onSignOut: () => void
+  profilePicture?: string
+  streakRefreshKey?: number
   children: ReactNode
 }
 
-export function WebAppShell({ activeTab, setActiveTab, user, onSignOut, children }: WebAppShellProps) {
+export function WebAppShell({
+  activeNav,
+  setActiveNav,
+  user,
+  profilePicture,
+  streakRefreshKey = 0,
+  children,
+}: WebAppShellProps) {
   const displayName = user?.user_metadata?.public_username
     || user?.user_metadata?.name
     || user?.email?.split('@')[0]
     || 'Member'
 
+  const avatarUrl = profilePicture || user?.user_metadata?.avatar_url || ''
+  const initials = displayName.slice(0, 1).toUpperCase()
+
+  const handleNavClick = (item: NavItem) => {
+    setActiveNav(item.id)
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[#07060c] text-zinc-100">
-      <aside className="bu-web-sidebar">
-        <div className="border-b border-white/8 px-4 py-4">
+    <div className="bu-web-app flex h-screen overflow-hidden bg-[#05040a] text-zinc-100">
+      <aside className="bu-web-sidebar" aria-label="Sidebar navigation">
+        <div className="bu-web-sidebar-brand">
           <img src={logoImage} alt="Between Us" className="h-7 w-auto max-w-[150px] object-contain" />
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="App">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon
-            const showActive = item.id === 'home' || item.id === 'discover'
-              ? activeTab === 'discover' && item.id === 'home'
-              : item.id === 'write'
-                ? activeTab === 'share'
-                : activeTab === item.tab
 
+        <nav className="bu-web-sidebar-nav" aria-label="App">
+          {NAV_ITEMS.filter((item) => item.id !== 'write').map((item) => {
+            const Icon = item.icon
+            const isActive = activeNav === item.id
             return (
               <button
                 key={item.id}
                 type="button"
-                disabled={item.disabled}
-                onClick={() => setActiveTab(item.tab)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  showActive
-                    ? 'bg-fuchsia-500/15 text-fuchsia-100'
-                    : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                } disabled:opacity-40`}
+                onClick={() => handleNavClick(item)}
+                className={`bu-web-nav-item ${isActive ? 'is-active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {item.label}
               </button>
             )
           })}
-          <div className="px-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('share')}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-orange-400 px-3 py-2.5 text-sm font-semibold text-white shadow-md shadow-fuchsia-500/20"
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-              Write a Story
-            </button>
-          </div>
         </nav>
-        <div className="border-t border-white/8 p-3">
-          <div className="mb-2 truncate px-2 text-sm font-medium text-zinc-200">{displayName}</div>
-          <div className="mb-3 truncate px-2 text-xs text-zinc-500">{user?.email}</div>
+
+        <div className="bu-web-sidebar-profile">
           <button
             type="button"
-            onClick={onSignOut}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-zinc-400 hover:bg-white/5 hover:text-white"
+            onClick={() => setActiveNav('profile')}
+            className="bu-web-profile-btn"
+            aria-label="View profile"
           >
-            <LogOut className="h-4 w-4" />
-            Log out
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="bu-web-profile-avatar" />
+            ) : (
+              <span className="bu-web-profile-avatar bu-web-profile-avatar--fallback">{initials}</span>
+            )}
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-medium text-zinc-100">{displayName}</span>
+              <span className="block truncate text-xs text-fuchsia-300/80">View profile</span>
+            </span>
           </button>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/8 bg-[#0b0912]/90 px-4 backdrop-blur lg:px-6">
+        <header className="bu-web-header">
           <div className="bu-web-mobile-header-logo items-center gap-3">
             <img src={logoImage} alt="Between Us" className="h-6 w-auto max-w-[130px] object-contain" />
           </div>
-          <h1 className="bu-web-page-title font-[Syne,system-ui,sans-serif] text-lg font-semibold text-white">
-            {activeTab === 'share' ? 'Write a Story' : activeTab === 'discover' ? 'Home' : activeTab === 'community' ? 'Stories' : activeTab === 'checkin' ? 'Check-in' : 'Profile'}
-          </h1>
+
+          <div className="bu-web-header-main">
+            <h1 className="bu-web-page-title font-[Syne,system-ui,sans-serif] text-xl font-semibold text-white">
+              {PAGE_TITLES[activeNav]}
+            </h1>
+            {activeNav === 'home' && (
+              <button
+                type="button"
+                onClick={() => setActiveNav('write')}
+                className="bu-web-header-cta hidden sm:inline-flex"
+              >
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+                Write a Story
+              </button>
+            )}
+          </div>
+
           <button
             type="button"
-            onClick={() => setActiveTab('share')}
+            onClick={() => setActiveNav('write')}
             className="bu-web-mobile-write rounded-xl bg-gradient-to-r from-fuchsia-500 to-orange-400 px-3 py-1.5 text-xs font-semibold text-white"
           >
             Write
           </button>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto h-full max-w-3xl">
-            <Suspense
-              fallback={(
-                <div className="flex h-full items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-fuchsia-400" />
-                </div>
-              )}
-            >
-              {children}
-            </Suspense>
-          </div>
-        </main>
+        <div className="bu-web-body">
+          <main className="bu-web-main min-h-0 flex-1 overflow-y-auto">
+            <div className="bu-web-main-inner">
+              <Suspense
+                fallback={(
+                  <div className="flex h-full items-center justify-center py-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-fuchsia-400" />
+                  </div>
+                )}
+              >
+                {children}
+              </Suspense>
+            </div>
+          </main>
+
+          <aside className="bu-web-rail" aria-label="Insights">
+            <DailyStreakPanel refreshKey={streakRefreshKey} />
+            <ImpactPanel />
+            <TrendingTopicsPanel />
+          </aside>
+        </div>
 
         <nav className="bu-web-mobile-nav shrink-0 border-t border-white/8 bg-[#0b0912]" aria-label="Mobile">
           {[
-            { tab: 'discover' as AppTab, icon: Home, label: 'Home' },
-            { tab: 'community' as AppTab, icon: Globe, label: 'Stories' },
-            { tab: 'share' as AppTab, icon: PenSquare, label: 'Write' },
-            { tab: 'checkin' as AppTab, icon: CheckCircle, label: 'Check-in' },
-            { tab: 'profile' as AppTab, icon: User, label: 'Profile' },
-          ].map(({ tab, icon: Icon, label }) => (
+            { nav: 'home' as WebNavId, icon: Home, label: 'Home' },
+            { nav: 'stories' as WebNavId, icon: Globe, label: 'Stories' },
+            { nav: 'write' as WebNavId, icon: PenSquare, label: 'Write' },
+            { nav: 'activity' as WebNavId, icon: Activity, label: 'Activity' },
+            { nav: 'profile' as WebNavId, icon: User, label: 'Profile' },
+          ].map(({ nav, icon: Icon, label }) => (
             <button
-              key={tab}
+              key={nav}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveNav(nav)}
               className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] ${
-                activeTab === tab ? 'text-fuchsia-300' : 'text-zinc-500'
+                activeNav === nav ? 'text-fuchsia-300' : 'text-zinc-500'
               }`}
             >
               <Icon className="h-5 w-5" />
@@ -157,18 +209,16 @@ export function WebAppShell({ activeTab, setActiveTab, user, onSignOut, children
           ))}
         </nav>
       </div>
-
-      <aside className="bu-web-rail">
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-          <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <Bookmark className="h-4 w-4 text-fuchsia-400" />
-            Tips
-          </div>
-          <p className="text-xs leading-relaxed text-zinc-500">
-            Stay anonymous in public. Vote and reply with care. Your private check-ins never appear on the public site.
-          </p>
-        </div>
-      </aside>
     </div>
   )
+}
+
+export function navToTab(nav: WebNavId): AppTab {
+  const item = NAV_ITEMS.find((entry) => entry.id === nav)
+  return item?.tab ?? 'discover'
+}
+
+export function navCommunityView(nav: WebNavId): 'all' | 'saved' {
+  const item = NAV_ITEMS.find((entry) => entry.id === nav)
+  return item?.communityView ?? 'all'
 }

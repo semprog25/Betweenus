@@ -3,7 +3,8 @@
  * Easy-to-use functions for all backend operations
  */
 
-import { callServer } from './supabase/client';
+import { callServer } from './supabase/client'
+import { syncUserTimezone as syncUserTimezoneImpl } from './timezone-sync';
 import { getActorId, getActorIdForRequest } from './actor-id';
 
 // Re-export auth functions for convenience
@@ -183,6 +184,27 @@ export async function reportPost(postId: string, reason: ReportReason, details?:
 
 export async function getUserStats(_userId?: string) {
   return callServer('/stats', { method: 'GET' });
+}
+
+export interface DailyStreakState {
+  currentStreak: number
+  activityDates: string[]
+  weeklyActivity: boolean[]
+  todayRegistered: boolean
+  activityDate: string
+  timeZone?: string
+}
+
+export async function getDailyStreak(): Promise<{ streak: DailyStreakState }> {
+  const result = await callServer('/daily-streak', { method: 'GET' })
+  if (!result.success || !result.streak) {
+    throw new Error(typeof result.error === 'string' ? result.error : 'Failed to load daily streak')
+  }
+  return { streak: result.streak }
+}
+
+export async function syncUserTimezone(): Promise<void> {
+  return syncUserTimezoneImpl()
 }
 
 export async function getUserPosts(_userId?: string) {
