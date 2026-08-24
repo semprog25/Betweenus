@@ -87,6 +87,7 @@
     "cap:open:android": "npx cap open android",
     "cap:add:ios": "npx cap add ios",
     "cap:add:android": "npx cap add android",
-    "test:security": "npx tsx scripts/security-boundary-tests.ts"
+    "test:security": "npx tsx scripts/security-boundary-tests.ts",
+    "icons:generate": "python3 scripts/generate-brand-icons.py"
   }
 }

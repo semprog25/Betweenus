@@ -20,7 +20,7 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#6366f1',
+      backgroundColor: '#05040a',
       showSpinner: false,
       androidSplashResourceName: 'splash',
       iosSplashResourceName: 'Splash',
@@ -41,7 +41,7 @@ const config: CapacitorConfig = {
 
     StatusBar: {
       style: 'dark',
-      backgroundColor: '#6366f1',
+      backgroundColor: '#05040a',
     },
 
     // Google AdMob — TEST App IDs until production units are configured

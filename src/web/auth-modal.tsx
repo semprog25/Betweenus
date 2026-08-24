@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, X } from 'lucide-react'
+import logoImage from '../assets/betweenus-logo.png'
 import { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } from '../utils/auth'
 import { notifyAuthChanged } from './use-auth-state'
 import { isNativeMobile } from '../utils/platform'
@@ -18,13 +19,60 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [showEmail, setShowEmail] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
     setError('')
     setShowEmail(false)
     setPassword('')
+    const timer = window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
   }, [open, mode])
+
+  useEffect(() => {
+    if (!open) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.classList.add('bu-auth-open')
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
+      if (event.key !== 'Tab' || !panelRef.current) return
+
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.documentElement.classList.remove('bu-auth-open')
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -76,39 +124,51 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
     }
   }
 
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) onClose()
+  }
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="auth-modal-title"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+      className="bu-auth-overlay"
+      role="presentation"
+      onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-md rounded-2xl border border-fuchsia-500/20 bg-[#0c0a12] p-6 shadow-2xl shadow-fuchsia-950/40">
+      <div
+        ref={panelRef}
+        className="bu-auth-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white"
+          className="bu-auth-close"
           aria-label="Close"
         >
-          <X className="h-5 w-5" />
+          <X className="h-5 w-5" aria-hidden="true" />
         </button>
 
-        <h2 id="auth-modal-title" className="font-[Syne,system-ui,sans-serif] text-2xl font-bold text-white">
+        <div className="bu-auth-brand">
+          <img src={logoImage} alt="Between Us" className="bu-auth-logo" />
+        </div>
+
+        <h2 id="auth-modal-title" className="bu-auth-title">
           {mode === 'signup' ? 'Sign up' : 'Log in'}
         </h2>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="bu-auth-subtitle">
           Your real identity doesn&apos;t have to be your public identity.
         </p>
 
-        <div className="mt-5 flex flex-col gap-2.5">
+        <div className="bu-auth-actions">
           <button
             type="button"
             onClick={handleGoogle}
             disabled={isSubmitting}
-            className="rounded-xl border border-fuchsia-500/25 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-fuchsia-500/10 disabled:opacity-60"
+            className="bu-auth-provider-btn"
           >
             Continue with Google
           </button>
@@ -116,21 +176,21 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
             type="button"
             onClick={handleApple}
             disabled={isSubmitting}
-            className="rounded-xl border border-fuchsia-500/25 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-fuchsia-500/10 disabled:opacity-60"
+            className="bu-auth-provider-btn"
           >
             Continue with Apple
           </button>
           <button
             type="button"
             onClick={() => setShowEmail(true)}
-            className="rounded-xl border border-fuchsia-500/25 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-fuchsia-500/10"
+            className="bu-auth-provider-btn"
           >
             Continue with Email
           </button>
         </div>
 
         {showEmail && (
-          <div className="mt-4 flex flex-col gap-2.5">
+          <div className="bu-auth-email-fields">
             {mode === 'signup' && (
               <input
                 type="text"
@@ -138,7 +198,7 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Name (optional)"
                 aria-label="Name"
-                className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-fuchsia-500/50"
+                className="bu-auth-input"
               />
             )}
             <input
@@ -148,7 +208,7 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
               placeholder="Email"
               autoComplete="email"
               aria-label="Email"
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-fuchsia-500/50"
+              className="bu-auth-input"
             />
             <input
               type="password"
@@ -157,29 +217,29 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
               placeholder="Password (min 6 characters)"
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               aria-label="Password"
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-fuchsia-500/50"
+              className="bu-auth-input"
             />
             <button
               type="button"
               onClick={handleEmailAuth}
               disabled={isSubmitting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-orange-400 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/30 disabled:opacity-60"
+              className="bu-auth-submit"
             >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {mode === 'signup' ? 'Create account' : 'Sign in'}
             </button>
           </div>
         )}
 
         {error && (
-          <p className="mt-3 text-sm text-red-300" role="alert">{error}</p>
+          <p className="bu-auth-error" role="alert">{error}</p>
         )}
 
-        <p className="mt-5 text-center text-sm text-zinc-500">
+        <p className="bu-auth-switch">
           {mode === 'signup' ? 'Already have an account?' : 'New here?'}{' '}
           <button
             type="button"
-            className="text-fuchsia-300 underline-offset-2 hover:underline"
+            className="bu-auth-switch-btn"
             onClick={() => onModeChange(mode === 'signup' ? 'login' : 'signup')}
           >
             {mode === 'signup' ? 'Log in' : 'Sign up'}

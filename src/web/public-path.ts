@@ -2,6 +2,7 @@ export type PublicPath =
   | { name: 'home' }
   | { name: 'stories' }
   | { name: 'story'; id: string }
+  | { name: 'journal' }
   | { name: 'download' }
   | { name: 'privacy' }
   | { name: 'terms' }
@@ -10,6 +11,7 @@ export type PublicPath =
 
 export function parsePublicPath(pathname: string = window.location.pathname): PublicPath {
   const path = pathname.replace(/\/+$/, '') || '/'
+  if (path === '/journal') return { name: 'journal' }
   if (path === '/stories') return { name: 'stories' }
   if (path === '/download') return { name: 'download' }
   if (path === '/privacy') return { name: 'privacy' }
@@ -27,6 +29,8 @@ export function pathToHref(path: PublicPath): string {
       return '/'
     case 'stories':
       return '/stories'
+    case 'journal':
+      return '/journal'
     case 'story':
       return `/story/${encodeURIComponent(path.id)}`
     case 'download':

@@ -16,6 +16,17 @@ export const SITE_NAME = 'Between Us'
 export const SITE_DESCRIPTION =
   'Between Us — write, discover, vote on, and discuss anonymous community stories.'
 
+/** Public contact addresses (canonical — used on website + store listings). */
+export const SUPPORT_EMAIL = 'support@betweenus.semprog.de'
+export const PRIVACY_EMAIL = 'privacy@betweenus.semprog.de'
+export const LEGAL_EMAIL = 'legal@betweenus.semprog.de'
+
+export const PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.betweenus.app'
+
+/** Set true when App Store listing is live — do not fabricate URLs. */
+export const HAS_APP_STORE_LISTING = false
+
 export const SUPABASE_PROJECT_ID = 'qoqbdiixztolvtcjdnle'
 
 export const SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`
