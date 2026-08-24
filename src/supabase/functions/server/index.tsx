@@ -217,35 +217,97 @@ app.get("/make-server-6c9b0e48/journal", async (c) => {
 
 // ==================== POST IMAGE UPLOAD ====================
 
-// Upload post image to Supabase Storage
+const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function detectImageMime(buffer: Uint8Array): { mime: string; ext: string } | null {
+  if (buffer.length < 12) return null;
+  // JPEG
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { mime: "image/jpeg", ext: "jpg" };
+  }
+  // PNG
+  if (
+    buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+  ) {
+    return { mime: "image/png", ext: "png" };
+  }
+  // GIF
+  if (
+    buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38
+  ) {
+    return { mime: "image/gif", ext: "gif" };
+  }
+  // WEBP (RIFF....WEBP)
+  if (
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) {
+    return { mime: "image/webp", ext: "webp" };
+  }
+  return null;
+}
+
+function extractPostImagePath(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl || typeof imageUrl !== "string") return null;
+  const marker = "/storage/v1/object/public/post-images/";
+  const idx = imageUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return decodeURIComponent(imageUrl.slice(idx + marker.length).split("?")[0]);
+}
+
+async function deletePostImageIfOwned(imageUrl: string | null | undefined, ownerId: string) {
+  const path = extractPostImagePath(imageUrl);
+  if (!path) return;
+  if (!path.startsWith(`${ownerId}/`)) {
+    console.warn("Skipping image delete — path does not match owner", path, ownerId);
+    return;
+  }
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.storage.from("post-images").remove([path]);
+  if (error) console.error("Failed to delete post image:", error.message);
+}
+
+// Upload post image to Supabase Storage (auth required, magic-byte validated)
 app.post("/make-server-6c9b0e48/upload-post-image", async (c) => {
   try {
     const authResult = await requireAuth(c);
     if (authResult.error) return authResult.error;
+    const user = authResult.user!;
 
     const body = await c.req.json();
     const { image: base64Data } = body;
 
-    if (!base64Data || typeof base64Data !== 'string') {
+    if (!base64Data || typeof base64Data !== "string") {
       return c.json({ error: "Image data is required" }, 400);
     }
 
-    // Extract base64 content (handle data URL format)
-    const matches = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
-    const ext = matches ? matches[1] : 'png';
-    const base64Content = matches ? matches[2] : base64Data;
+    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+    const base64Content = matches ? matches[2] : base64Data.replace(/^data:[^;]+;base64,/, "");
 
-    const buffer = Uint8Array.from(atob(base64Content), (c) => c.charCodeAt(0));
-    const fileName = `post-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${ext === 'gif' ? 'gif' : ext === 'jpeg' || ext === 'jpg' ? 'jpg' : 'png'}`;
+    let buffer: Uint8Array;
+    try {
+      buffer = Uint8Array.from(atob(base64Content), (ch) => ch.charCodeAt(0));
+    } catch {
+      return c.json({ error: "Invalid image encoding" }, 400);
+    }
 
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_POST_IMAGE_BYTES) {
+      return c.json({ error: "Image must be between 1 byte and 5MB" }, 400);
+    }
+
+    const detected = detectImageMime(buffer);
+    if (!detected) {
+      return c.json({ error: "Unsupported image type. Use JPEG, PNG, WEBP, or GIF." }, 400);
+    }
+
+    const fileName = `post-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${detected.ext}`;
+    const filePath = `${user.id}/${fileName}`;
     const supabase = getSupabaseAdmin();
-    const bucket = "post-images";
-    const filePath = fileName;
 
     const { data, error } = await supabase.storage
-      .from(bucket)
+      .from("post-images")
       .upload(filePath, buffer, {
-        contentType: ext === 'gif' ? 'image/gif' : ext === 'jpeg' || ext === 'jpg' ? 'image/jpeg' : 'image/png',
+        contentType: detected.mime,
         upsert: false,
       });
 
@@ -254,8 +316,8 @@ app.post("/make-server-6c9b0e48/upload-post-image", async (c) => {
       return c.json({ error: "Failed to upload image: " + error.message }, 500);
     }
 
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path);
-    return c.json({ success: true, url: urlData.publicUrl });
+    const { data: urlData } = supabase.storage.from("post-images").getPublicUrl(data.path);
+    return c.json({ success: true, url: urlData.publicUrl, path: data.path });
   } catch (error) {
     console.error("Upload error:", error);
     return c.json({ error: "Failed to upload image" }, 500);
@@ -283,6 +345,24 @@ app.post("/make-server-6c9b0e48/posts", async (c) => {
 
     const resolvedUserId = authenticatedUser?.id || userId || null;
 
+    let safeImageUrl: string | null = null;
+    if (imageUrl) {
+      if (!authenticatedUser) {
+        return c.json({ error: "Authentication required to attach images" }, 401);
+      }
+      if (typeof imageUrl !== "string") {
+        return c.json({ error: "Invalid imageUrl" }, 400);
+      }
+      const path = extractPostImagePath(imageUrl);
+      if (!path) {
+        return c.json({ error: "imageUrl must be a Between Us post-images URL" }, 400);
+      }
+      if (!path.startsWith(`${authenticatedUser.id}/`)) {
+        return c.json({ error: "Unauthorized image ownership" }, 403);
+      }
+      safeImageUrl = imageUrl;
+    }
+
     const postId = generateId();
     const post = {
       id: postId,
@@ -292,8 +372,8 @@ app.post("/make-server-6c9b0e48/posts", async (c) => {
       languages: languages || ['en'],
       categories: categories || ['General'], // Save categories
       userId: resolvedUserId, // Track which user created it
-      imageUrl: imageUrl || null, // Optional: one image or GIF per post
-      imageAspect: imageAspect || null, // 'square' | 'wide' | 'portrait'
+      imageUrl: safeImageUrl,
+      imageAspect: safeImageUrl ? (imageAspect || null) : null,
       upvotes: 0,
       downvotes: 0,
       upvotedBy: [], // Track who upvoted
@@ -2005,6 +2085,8 @@ app.delete("/make-server-6c9b0e48/posts/:postId", async (c) => {
     if (post.userId !== user.id) {
       return c.json({ error: "Unauthorized - you can only delete your own posts" }, 403);
     }
+
+    await deletePostImageIfOwned(post.imageUrl, user.id);
     
     await kv.del(`post:${postId}`);
     
@@ -2202,77 +2284,168 @@ app.post("/make-server-6c9b0e48/subscription/buy-credits", async (c) => {
   }
 });
 
-// Use a credit to edit a post
+// Edit own post (JWT ownership required; optional image replace/remove)
 app.post("/make-server-6c9b0e48/posts/:postId/edit", async (c) => {
   try {
+    const authResult = await requireAuth(c);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user!;
+
     const postId = c.req.param("postId");
     const body = await c.req.json();
-    const { content, userId } = body;
-    
-    if (!content || !userId) {
-      return c.json({ error: "content and userId are required" }, 400);
+    const { content, categories, imageUrl, imageAspect, removeImage } = body;
+
+    if (!content || typeof content !== "string" || !content.trim()) {
+      return c.json({ error: "content is required" }, 400);
     }
-    
-    // Get subscription
-    const subscription = await kv.get(`subscription:${userId}`) || {
-      tier: 'free',
+
+    const subscription = await kv.get(`subscription:${user.id}`) || {
+      tier: "free",
       credits: 0,
     };
-    
-    // Check if user can edit (needs credits or unlimited tier)
-    if (subscription.tier !== 'pro' && subscription.credits <= 0) {
-      return c.json({ 
+
+    if (subscription.tier !== "pro" && (subscription.credits || 0) <= 0) {
+      return c.json({
         error: "No edit credits available. Upgrade to Premium or purchase credits.",
-        needsCredits: true
+        needsCredits: true,
       }, 403);
     }
-    
-    // Get post
+
     const post = await kv.get(`post:${postId}`);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
-    
-    // Verify user owns the post
-    if (post.userId !== userId) {
+
+    if (post.userId !== user.id) {
       return c.json({ error: "Unauthorized - you can only edit your own posts" }, 403);
     }
-    
-    // Save original content to edit history
+
     post.editHistory = post.editHistory || [];
     post.editHistory.push({
       content: post.content,
+      imageUrl: post.imageUrl || null,
       editedAt: new Date().toISOString(),
     });
-    
-    // Update content
-    post.content = content;
+
+    post.content = content.trim();
+    if (Array.isArray(categories) && categories.length > 0) {
+      post.categories = categories.slice(0, 3);
+    }
+
+    if (removeImage === true) {
+      await deletePostImageIfOwned(post.imageUrl, user.id);
+      post.imageUrl = null;
+      post.imageAspect = null;
+    } else if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      if (post.imageUrl && post.imageUrl !== imageUrl) {
+        await deletePostImageIfOwned(post.imageUrl, user.id);
+      }
+      post.imageUrl = imageUrl;
+      post.imageAspect = imageAspect || post.imageAspect || null;
+    }
+
     post.lastEditedAt = new Date().toISOString();
     post.isEdited = true;
-    
+
     await kv.set(`post:${postId}`, post);
-    
-    // Update user-post copy
-    if (post.userId) {
-      await kv.set(`user-post:${post.userId}:${postId}`, post);
-    }
-    
-    // Deduct credit if not pro tier
-    if (subscription.tier !== 'pro') {
+    await kv.set(`user-post:${user.id}:${postId}`, post);
+
+    if (subscription.tier !== "pro") {
       subscription.credits = (subscription.credits || 0) - 1;
       subscription.updatedAt = new Date().toISOString();
-      await kv.set(`subscription:${userId}`, subscription);
+      await kv.set(`subscription:${user.id}`, subscription);
     }
-    
-    console.log(`Post edited: ${postId} by user ${userId}`);
-    return c.json({ 
-      success: true, 
+
+    console.log(`Post edited: ${postId} by user ${user.id}`);
+    return c.json({
+      success: true,
       post,
-      creditsRemaining: subscription.credits
+      creditsRemaining: subscription.credits,
     });
   } catch (error) {
     console.error("Error editing post:", error);
     return c.json({ error: "Failed to edit post" }, 500);
+  }
+});
+
+const REPORT_REASONS = [
+  "spam",
+  "harassment",
+  "hate",
+  "sexual",
+  "personal_info",
+  "scam",
+  "copyright",
+  "other",
+] as const;
+
+// Report a post (authenticated or validated anonymous actor)
+app.post("/make-server-6c9b0e48/posts/:postId/report", async (c) => {
+  try {
+    const postId = c.req.param("postId");
+    const body = await c.req.json();
+    const { reason, details, userId } = body;
+
+    if (!REPORT_REASONS.includes(reason)) {
+      return c.json({ error: "Invalid report reason" }, 400);
+    }
+
+    const actor = await resolveActorId(c, userId);
+    if (actor.error) return actor.error;
+    const reporterId = actor.actorId!;
+
+    const post = await kv.get(`post:${postId}`);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    if (post.userId && post.userId === reporterId) {
+      return c.json({ error: "You cannot report your own post" }, 400);
+    }
+
+    const existing = await kv.get(`post-report-by-user:${postId}:${reporterId}`);
+    if (existing) {
+      return c.json({ success: true, message: "Already reported", duplicate: true });
+    }
+
+    const reportId = generateId();
+    const report = {
+      id: reportId,
+      postId,
+      reason,
+      details: typeof details === "string" ? details.slice(0, 500) : "",
+      reporterId,
+      isAuthenticated: actor.isAuthenticated,
+      status: "open",
+      createdAt: new Date().toISOString(),
+      postSnippet: typeof post.content === "string" ? post.content.slice(0, 200) : "",
+      postImageUrl: post.imageUrl || null,
+    };
+
+    await kv.set(`report:${reportId}`, report);
+    await kv.set(`post-report:${postId}:${reportId}`, report);
+    await kv.set(`post-report-by-user:${postId}:${reporterId}`, { reportId, createdAt: report.createdAt });
+
+    return c.json({ success: true, reportId });
+  } catch (error) {
+    console.error("Error reporting post:", error);
+    return c.json({ error: "Failed to report post" }, 500);
+  }
+});
+
+// Admin: list open reports
+app.get("/make-server-6c9b0e48/admin/reports", async (c) => {
+  const adminError = requireAdmin(c);
+  if (adminError) return adminError;
+  try {
+    const reports = (await kv.getByPrefix("report:")) || [];
+    const sorted = reports.sort((a: any, b: any) =>
+      String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
+    );
+    return c.json({ reports: sorted });
+  } catch (error) {
+    console.error("Error listing reports:", error);
+    return c.json({ error: "Failed to list reports" }, 500);
   }
 });
 

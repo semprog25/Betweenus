@@ -200,21 +200,15 @@ export function ShareTab() {
       let imageAspect: 'square' | 'wide' | 'portrait' | undefined;
 
       if (selectedImage) {
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(selectedImage);
-        });
-        const { url } = await uploadPostImage(base64);
+        if (!session?.user?.id) {
+          toast.error(t('share.imageRequiresAuth') || 'Sign in to upload images');
+          return;
+        }
+        const { compressImageForUpload } = await import('../utils/image-compress');
+        const compressed = await compressImageForUpload(selectedImage);
+        const { url } = await uploadPostImage(compressed.dataUrl);
         imageUrl = url;
-        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = reject;
-          i.src = base64;
-        });
-        imageAspect = getImageAspect(img.naturalWidth, img.naturalHeight);
+        imageAspect = getImageAspect(compressed.width, compressed.height);
       }
 
       await createPost({

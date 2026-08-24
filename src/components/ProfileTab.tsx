@@ -310,7 +310,7 @@ export function ProfileTab({
 
     setIsEditing(true);
     try {
-      const response = await editPost(postId, editContent, session.user.id);
+      const response = await editPost(postId, editContent);
       
       if (response.needsCredits) {
         toast.error(response.error, {

@@ -140,11 +140,39 @@ export async function deletePost(postId: string, userId?: string) {
   return callServer(`/posts/${postId}${query}`, { method: 'DELETE' });
 }
 
-export async function editPost(postId: string, content: string, userId: string) {
+export async function editPost(
+  postId: string,
+  content: string,
+  options?: {
+    categories?: string[]
+    imageUrl?: string | null
+    imageAspect?: 'square' | 'wide' | 'portrait' | null
+    removeImage?: boolean
+  },
+) {
   return callServer(`/posts/${postId}/edit`, {
     method: 'POST',
-    body: JSON.stringify({ content, userId }),
+    body: JSON.stringify({ content, ...options }),
   });
+}
+
+export type ReportReason =
+  | 'spam'
+  | 'harassment'
+  | 'hate'
+  | 'sexual'
+  | 'personal_info'
+  | 'scam'
+  | 'copyright'
+  | 'other'
+
+export async function reportPost(postId: string, reason: ReportReason, details?: string) {
+  const actor = getActorIdForRequest()
+  if ('error' in actor) throw new Error(actor.error)
+  return callServer(`/posts/${postId}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, details, userId: actor.userId }),
+  })
 }
 
 // ==================== STATISTICS ====================

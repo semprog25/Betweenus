@@ -16,6 +16,7 @@ import {
   X,
   Compass,
   RefreshCw,
+  Flag,
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
@@ -24,6 +25,9 @@ import { toast } from 'sonner@2.0.3'
 import { useLanguage } from './LanguageContext'
 import { callServer } from '../utils/supabase/client'
 import { getActorId } from '../utils/actor-id'
+import { ReportPostModal } from './ReportPostModal'
+import { FeedAdCard } from './FeedAdCard'
+import { isAdFreeUser, shouldInsertFeedAd } from '../ads/admob'
 
 interface Reply {
   id: string
@@ -75,9 +79,12 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [userId, setUserId] = useState<string>('')
+  const [reportPostId, setReportPostId] = useState<string | null>(null)
+  const [adFree, setAdFree] = useState(false)
 
   useEffect(() => {
     setUserId(getActorId() || '')
+    isAdFreeUser().then(setAdFree).catch(() => setAdFree(false))
   }, [])
 
   const fetchDiscoverPosts = useCallback(async (filter: DiscoverFilter = currentFilter) => {
@@ -366,8 +373,9 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
               const score = (post.upvotes || 0) - (post.downvotes || 0)
 
               return (
+                <div key={post.id} className="space-y-4">
+                  {shouldInsertFeedAd(index, adFree) ? <FeedAdCard /> : null}
                 <motion.article
-                  key={post.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(index * 0.03, 0.3) }}
@@ -425,18 +433,42 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
 
                         {post.imageUrl && (
                           <div className="mt-3 rounded-xl overflow-hidden bg-muted">
-                            <img src={post.imageUrl} alt="" className="w-full max-h-80 object-cover" />
+                            <img
+                              src={post.imageUrl}
+                              alt=""
+                              loading="lazy"
+                              className={`w-full object-cover ${
+                                post.imageAspect === 'portrait'
+                                  ? 'max-h-96'
+                                  : post.imageAspect === 'wide'
+                                    ? 'max-h-56'
+                                    : 'max-h-80'
+                              }`}
+                            />
                           </div>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => setExpandedPostId(isExpanded ? null : post.id)}
-                          className="mt-3 flex items-center gap-1.5 text-sm text-purple-600 dark:text-purple-400 font-medium min-h-[44px]"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          {isExpanded ? t('discover.hideComments') : t('discover.viewComments')}
-                        </button>
+                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedPostId(isExpanded ? null : post.id)}
+                            className="flex items-center gap-1.5 text-sm text-purple-600 dark:text-purple-400 font-medium min-h-[44px]"
+                          >
+                            <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                            {isExpanded ? t('discover.hideComments') : t('discover.viewComments')}
+                          </button>
+                          {post.userId !== userId && (
+                            <button
+                              type="button"
+                              onClick={() => setReportPostId(post.id)}
+                              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-orange-600 min-h-[44px] px-2"
+                              aria-label={t('report.title')}
+                            >
+                              <Flag className="w-4 h-4" aria-hidden="true" />
+                              {t('report.action')}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -540,11 +572,20 @@ export function DiscoverTab({ selectedLanguages }: DiscoverTabProps) {
                     )}
                   </div>
                 </motion.article>
+                </div>
               )
             })}
           </div>
         )}
       </div>
+
+      <ReportPostModal
+        postId={reportPostId}
+        open={!!reportPostId}
+        onOpenChange={(open) => {
+          if (!open) setReportPostId(null)
+        }}
+      />
     </div>
   )
 }

@@ -108,6 +108,12 @@ function AppContent() {
     }
   }, []);
 
+  useEffect(() => {
+    import('./ads/admob').then(({ initializeAdMob }) => {
+      initializeAdMob().catch(() => {})
+    })
+  }, [])
+
   // Check if user is test/skip account to show Reset button
   useEffect(() => {
     const session = getSession();

@@ -39,6 +39,12 @@ const config: CapacitorConfig = {
       style: 'dark',
       backgroundColor: '#6366f1',
     },
+
+    // Google AdMob — TEST App IDs until production units are configured
+    AdMob: {
+      appIdAndroid: 'ca-app-pub-3940256099942544~3347511713',
+      appIdIos: 'ca-app-pub-3940256099942544~1458002511',
+    },
   },
 };
 
