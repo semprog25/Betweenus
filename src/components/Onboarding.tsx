@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AnimatedLogo } from './AnimatedLogo';
 import { AuthStep } from './AuthStep';
 import { OnboardingProgress } from './OnboardingProgress';
