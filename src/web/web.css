@@ -2650,8 +2650,8 @@ html.bu-auth-open {
   :root {
     --bu-shell-pad: 1.25rem;
     --bu-mobile-content-max: calc(100vw - 3rem);
-    --bu-mobile-card-width: 20rem;
-    --bu-mobile-deck-width: min(27rem, calc(100vw - 2rem));
+    --bu-mobile-card-width: 17.5rem;
+    --bu-mobile-deck-width: min(23.625rem, calc(100vw - 2rem));
   }
 
   html.bu-home-snap {
@@ -2816,7 +2816,7 @@ html.bu-auth-open {
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: var(--bu-mobile-deck-width);
+    max-width: var(--bu-mobile-card-width);
     margin-inline: auto;
     margin-top: 0;
     min-height: 0;
@@ -2825,18 +2825,17 @@ html.bu-auth-open {
   }
 
   .bu-hero-deck--mobile {
-    width: 100%;
+    width: var(--bu-mobile-deck-width);
     max-width: var(--bu-mobile-deck-width);
-    height: 17.625rem;
-    min-height: 17.625rem;
-    margin-inline: auto;
+    height: 15.5rem;
+    min-height: 15.5rem;
+    margin-inline: calc((var(--bu-mobile-card-width) - var(--bu-mobile-deck-width)) / 2);
     padding-bottom: 0;
-    transform: translateX(calc((40px - 96px) / 2 - 4px));
   }
 
   .bu-hero-deck--mobile .bu-hero-deck-card {
-    width: min(100%, 20rem);
-    max-width: 20rem;
+    width: min(100%, var(--bu-mobile-card-width));
+    max-width: var(--bu-mobile-card-width);
     left: 0;
     right: 0;
     margin-inline: auto;
@@ -2851,24 +2850,24 @@ html.bu-auth-open {
 
   .bu-hero-deck--mobile .bu-hero-deck-card--middle {
     transform: translate(
-      calc(96px * min(1, (100vw - 2rem) / 27rem)),
-      calc(73px * min(1, (100vw - 2rem) / 27rem))
+      calc(84px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(64px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(5.5deg) scale(0.96);
     opacity: 0.9;
   }
 
   .bu-hero-deck--mobile .bu-hero-deck-card--back {
     transform: translate(
-      calc(-40px * min(1, (100vw - 2rem) / 27rem)),
-      calc(138px * min(1, (100vw - 2rem) / 27rem))
+      calc(-35px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(121px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(-7deg) scale(0.91);
     opacity: 0.74;
   }
 
   .bu-hero-deck--mobile .bu-hero-deck-card--exiting {
     transform: translate(
-      calc(9px * min(1, (100vw - 2rem) / 27rem)),
-      calc(-98px * min(1, (100vw - 2rem) / 27rem))
+      calc(8px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(-86px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(-14deg) scale(1.04);
   }
 
@@ -2879,16 +2878,16 @@ html.bu-auth-open {
   @keyframes bu-deck-enter-back-mobile {
     from {
       transform: translate(
-        calc(71px * min(1, (100vw - 2rem) / 27rem)),
-        calc(164px * min(1, (100vw - 2rem) / 27rem))
+        calc(62px * min(1, (100vw - 2rem) / 23.625rem)),
+        calc(144px * min(1, (100vw - 2rem) / 23.625rem))
       ) rotate(10deg) scale(0.8);
       opacity: 0;
     }
 
     to {
       transform: translate(
-        calc(-40px * min(1, (100vw - 2rem) / 27rem)),
-        calc(138px * min(1, (100vw - 2rem) / 27rem))
+        calc(-35px * min(1, (100vw - 2rem) / 23.625rem)),
+        calc(121px * min(1, (100vw - 2rem) / 23.625rem))
       ) rotate(-7deg) scale(0.91);
       opacity: 0.74;
     }
@@ -3051,22 +3050,22 @@ html.bu-auth-open {
 @media (prefers-reduced-motion: reduce) and (max-width: 767px) {
   .bu-hero-deck--mobile .bu-hero-deck-card--middle {
     transform: translate(
-      calc(36px * min(1, (100vw - 2rem) / 27rem)),
-      calc(48px * min(1, (100vw - 2rem) / 27rem))
+      calc(32px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(42px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(3deg) scale(0.95);
   }
 
   .bu-hero-deck--mobile .bu-hero-deck-card--back {
     transform: translate(
-      calc(-14px * min(1, (100vw - 2rem) / 27rem)),
-      calc(96px * min(1, (100vw - 2rem) / 27rem))
+      calc(-12px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(84px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(-4deg) scale(0.9);
   }
 
   .bu-hero-deck--mobile .bu-hero-deck-card--exiting {
     transform: translate(
-      calc(4px * min(1, (100vw - 2rem) / 27rem)),
-      calc(-68px * min(1, (100vw - 2rem) / 27rem))
+      calc(4px * min(1, (100vw - 2rem) / 23.625rem)),
+      calc(-60px * min(1, (100vw - 2rem) / 23.625rem))
     ) rotate(-11deg) scale(1.03);
   }
 }
