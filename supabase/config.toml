@@ -1,0 +1,4 @@
+# Supabase local config — production project: qoqbdiixztolvtcjdnle
+
+[functions.make-server-6c9b0e48]
+verify_jwt = false

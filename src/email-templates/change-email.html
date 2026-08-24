@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Email Change - Between Us</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0118; color: #ffffff;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #0a0118;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(59, 130, 246, 0.3);">
+                    
+                    <!-- Header with gradient -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 40px 40px 30px; text-align: center;">
+                            <img src="https://qoqbdiixztolvtcjdnle.supabase.co/storage/v1/object/sign/betweenus3/betweenus-white.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lMTYxZDg1My1iMGRlLTRkNjQtYTQxYS0xNTY5MmFmMGJhNWEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiZXR3ZWVudXMzL2JldHdlZW51cy13aGl0ZS5wbmciLCJpYXQiOjE3NjQ1OTAyODQsImV4cCI6MzM0MTM5MDI4NH0.lwIzw7kkRS-FvDLBrrhP8-MxMrTAjdlbme9Q0Bl5NH0" alt="Between Us" style="width: 180px; height: auto; max-width: 100%; display: block; margin: 0 auto;">
+                            <p style="margin: 20px 0 0; font-size: 16px; color: rgba(255,255,255,0.95);">
+                                Update your email address
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Animated email decoration -->
+                    <tr>
+                        <td style="background: linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%); padding: 30px 0; text-align: center;">
+                            <div style="font-size: 40px; letter-spacing: 10px;">
+                                📧 🔄 📧
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding: 0 40px 40px;">
+                            <h2 style="margin: 0 0 20px; font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                                Email Address Update
+                            </h2>
+                            
+                            <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #e5e5e5;">
+                                You recently requested to update the email address associated with your <strong style="color: #3b82f6;">Between Us</strong> account.
+                            </p>
+
+                            <p style="margin: 0 0 30px; font-size: 16px; line-height: 1.6; color: #e5e5e5;">
+                                To finalize this update, please follow the link below:
+                            </p>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td style="text-align: center; padding: 10px 0 30px;">
+                                        <a href="{{ .ConfirmationURL }}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 12px; font-size: 18px; font-weight: 600; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4); transition: transform 0.2s;">
+                                            Update Email Address
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Alternative link -->
+                            <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+                                <p style="margin: 0 0 10px; font-size: 14px; color: #93c5fd; font-weight: 600;">
+                                    Having trouble with the button?
+                                </p>
+                                <p style="margin: 0; font-size: 13px; color: #e5e5e5; word-break: break-all; line-height: 1.5;">
+                                    You can also paste this URL into your browser:<br>
+                                    <a href="{{ .ConfirmationURL }}" style="color: #3b82f6; text-decoration: underline;">{{ .ConfirmationURL }}</a>
+                                </p>
+                            </div>
+
+                            <!-- What happens next -->
+                            <div style="background: rgba(139, 92, 246, 0.1); border-radius: 12px; padding: 24px; margin-bottom: 30px;">
+                                <h3 style="margin: 0 0 15px; font-size: 18px; color: #fbbf24; font-weight: 600;">
+                                    After You Update
+                                </h3>
+                                <ul style="margin: 0; padding-left: 20px; color: #e5e5e5; line-height: 1.8;">
+                                    <li>Your previous email address will no longer be active</li>
+                                    <li>Future notifications will be sent to this new address</li>
+                                    <li>All your data and preferences stay the same</li>
+                                    <li>You can modify this again later from settings</li>
+                                </ul>
+                            </div>
+
+                            <!-- Info notice -->
+                            <div style="background: rgba(59, 130, 246, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                                <p style="margin: 0 0 10px; font-size: 14px; color: #93c5fd; font-weight: 600;">
+                                    Not You?
+                                </p>
+                                <p style="margin: 0; font-size: 13px; color: #e5e5e5; line-height: 1.5;">
+                                    If you did not request this update, you can safely disregard this message. No changes will be made to your account.
+                                </p>
+                            </div>
+
+                            <!-- Expiry note -->
+                            <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9ca3af; padding: 20px 0 0; border-top: 1px solid rgba(59, 130, 246, 0.2);">
+                                This link will remain active for 24 hours. After that, you may submit a new request from your account settings.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: rgba(0,0,0,0.2); padding: 30px 40px; text-align: center; border-top: 1px solid rgba(59, 130, 246, 0.2);">
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #9ca3af;">
+                                Made with 💜 for mental wellness
+                            </p>
+                            <p style="margin: 0 0 15px; font-size: 12px; color: #6b7280;">
+                                ✨ Dreamed by Darija ✨
+                            </p>
+                            <p style="margin: 0; font-size: 12px; color: #6b7280;">
+                                © 2025 Between Us. All rights reserved.
+                            </p>
+                            <p style="margin: 10px 0 0; font-size: 12px;">
+                                <a href="https://betweenus.semprog.de/" style="color: #3b82f6; text-decoration: none;">Visit Website</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
