@@ -59,10 +59,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.betweenus.app</string>
+			<string>com.betweenus.fun</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.betweenus.app</string>
+				<string>com.betweenus.fun</string>
 			</array>
 		</dict>
 	</array>

@@ -2,7 +2,8 @@
 
 ## Repository split (never mix)
 - Website (`betweenus_landing`): betweenus.fun — discovery, SEO, Journal, acquisition
-- App (this repo): com.betweenus.app — community, Spill, reactions, retention
+- App (this repo): Android `com.betweenus.app`, iOS `com.betweenus.fun` — community, Spill, reactions, retention
+- Never conflate package IDs: Android stays `.app`; iOS uses `.fun`
 - Supabase: one auth + one content system for all platforms
 
 ## Security

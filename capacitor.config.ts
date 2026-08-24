@@ -1,5 +1,9 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
+/**
+ * Capacitor appId matches the Android package (Play Console).
+ * iOS Bundle ID is overridden in Xcode to com.betweenus.fun — do not sync that away.
+ */
 const config: CapacitorConfig = {
   appId: 'com.betweenus.app',
   appName: 'Between Us',

@@ -1,9 +1,13 @@
 /**
  * Production site configuration for Between Us.
  * Canonical domain: https://betweenus.fun
+ *
+ * Platform identities (do not conflate):
+ * - Android package: com.betweenus.app
+ * - iOS bundle:      com.betweenus.fun
  */
 
-import { isNativeMobile } from '../utils/platform'
+import { isAndroid, isIOS, isNativeMobile } from '../utils/platform'
 
 export const CANONICAL_SITE_URL = 'https://betweenus.fun'
 
@@ -20,11 +24,35 @@ export const EDGE_FUNCTION_NAME = 'make-server-6c9b0e48'
 
 export const EDGE_FUNCTION_BASE = `${SUPABASE_URL}/functions/v1/${EDGE_FUNCTION_NAME}`
 
-/** Custom URL scheme registered in iOS Info.plist / Android intent-filters. */
-export const APP_URL_SCHEME = 'com.betweenus.app'
+/** Android applicationId / Play package — do not change for iOS migration. */
+export const ANDROID_PACKAGE_ID = 'com.betweenus.app'
 
-/** Native OAuth callback deep link (must also be allowlisted in Supabase Auth). */
-export const NATIVE_OAUTH_CALLBACK_URL = `${APP_URL_SCHEME}://auth/callback`
+/** iOS Bundle Identifier (Apple App ID). */
+export const IOS_BUNDLE_ID = 'com.betweenus.fun'
+
+/** Custom URL schemes registered per platform. */
+export const ANDROID_URL_SCHEME = ANDROID_PACKAGE_ID
+export const IOS_URL_SCHEME = IOS_BUNDLE_ID
+
+/**
+ * Native custom-scheme for the current platform.
+ * Web callers should not rely on this for OAuth redirects.
+ */
+export const getNativeUrlScheme = (): string => {
+  if (isIOS()) return IOS_URL_SCHEME
+  if (isAndroid()) return ANDROID_URL_SCHEME
+  return ANDROID_URL_SCHEME
+}
+
+/** @deprecated Prefer getNativeUrlScheme() — kept for transitional imports. */
+export const APP_URL_SCHEME = ANDROID_URL_SCHEME
+
+/** Native OAuth callback for the current platform (must be allowlisted in Supabase Auth). */
+export const getNativeOAuthCallbackUrl = (): string =>
+  `${getNativeUrlScheme()}://auth/callback`
+
+/** @deprecated Prefer getNativeOAuthCallbackUrl() */
+export const NATIVE_OAUTH_CALLBACK_URL = `${ANDROID_URL_SCHEME}://auth/callback`
 
 /** OAuth and Supabase auth redirects must use this origin in production. */
 export const getAppOrigin = (): string => {
@@ -37,7 +65,7 @@ export const getAppOrigin = (): string => {
 
 export const getOAuthRedirectUrl = (): string => {
   if (isNativeMobile()) {
-    return NATIVE_OAUTH_CALLBACK_URL
+    return getNativeOAuthCallbackUrl()
   }
 
   const origin = getAppOrigin()
@@ -48,6 +76,7 @@ export const ALLOWED_ORIGINS = [
   CANONICAL_SITE_URL,
   'https://www.betweenus.fun',
   'http://localhost:3000',
+  'http://localhost:3001',
   'http://localhost:5173',
   'capacitor://localhost',
   'ionic://localhost',

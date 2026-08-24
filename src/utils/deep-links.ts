@@ -12,7 +12,13 @@ import {
   type PendingAuthAction,
 } from './auth'
 import { isNativeMobile } from './platform'
-import { APP_URL_SCHEME, CANONICAL_SITE_URL } from '../config/site'
+import {
+  ANDROID_URL_SCHEME,
+  CANONICAL_SITE_URL,
+  IOS_URL_SCHEME,
+} from '../config/site'
+
+const NATIVE_URL_SCHEMES = [ANDROID_URL_SCHEME, IOS_URL_SCHEME] as const
 
 const PENDING_STORY_KEY = 'between_us_open_story_id'
 
@@ -28,8 +34,12 @@ function extractStoryId(url: string): string | null {
     const match = path.match(/^\/story\/([^/]+)$/)
     if (match) return decodeURIComponent(match[1])
 
-    // Custom scheme: com.betweenus.app://story/<id>
-    if (parsed.protocol.replace(':', '') === APP_URL_SCHEME || url.startsWith(`${APP_URL_SCHEME}://`)) {
+    // Custom schemes: com.betweenus.app://story/<id> (Android) | com.betweenus.fun://story/<id> (iOS)
+    const scheme = parsed.protocol.replace(':', '')
+    const isNativeScheme = NATIVE_URL_SCHEMES.some(
+      (s) => scheme === s || url.startsWith(`${s}://`),
+    )
+    if (isNativeScheme) {
       const hostPath = `${parsed.hostname}${parsed.pathname}`.replace(/^\/+/, '')
       const custom = hostPath.match(/^story\/([^/]+)$/)
       if (custom) return decodeURIComponent(custom[1])

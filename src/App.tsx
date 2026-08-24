@@ -18,13 +18,43 @@ import { registerDeepLinkHandlers, consumeOpenStoryId } from './utils/deep-links
 import { useAchievementNotifications } from './hooks/useAchievementNotifications';
 import { toast } from 'sonner@2.0.3';
 import logoImage from './assets/betweenus-logo.png';
+import { isWeb } from './utils/platform';
+import { useAuthState } from './web/use-auth-state';
+import { PublicWebsite } from './web/public-website';
+import { AuthenticatedWebApp } from './web/authenticated-web-app';
 
 const ShareTab = lazy(() => import('./components/ShareTab').then((m) => ({ default: m.ShareTab })));
 const DiscoverTab = lazy(() => import('./components/DiscoverTab').then((m) => ({ default: m.DiscoverTab })));
 
 type Tab = 'discover' | 'share' | 'checkin' | 'community' | 'profile';
 
+function AuthLoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#05040a]">
+      <div className="flex flex-col items-center gap-3">
+        <img src={logoImage} alt="Between Us" className="h-8 w-auto object-contain" />
+        <Loader2 className="h-6 w-6 animate-spin text-fuchsia-400" aria-label="Loading" />
+      </div>
+    </div>
+  )
+}
+
 function AppContent() {
+  const webAuth = useAuthState()
+  const isWebPlatform = isWeb()
+
+  if (isWebPlatform) {
+    if (webAuth.status === 'loading') return <AuthLoadingScreen />
+    if (webAuth.status === 'loggedOut') {
+      return <PublicWebsite onRequireAuth={() => undefined} />
+    }
+    return <AuthenticatedWebApp user={webAuth.user} />
+  }
+
+  return <NativeAppContent />
+}
+
+function NativeAppContent() {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
     // TEMPORARY: Force onboarding to show for testing - remove this later
     // return false;

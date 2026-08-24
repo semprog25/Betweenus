@@ -80,7 +80,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy:function": "cp src/supabase/functions/server/*.tsx supabase/functions/make-server-6c9b0e48/ && mv supabase/functions/make-server-6c9b0e48/index.tsx supabase/functions/make-server-6c9b0e48/index.ts 2>/dev/null || true && supabase functions deploy make-server-6c9b0e48",
-    "cap:sync": "npx cap sync",
+    "cap:sync": "npx cap sync && node scripts/ensure-ios-bundle-id.mjs",
     "cap:copy": "npx cap copy",
     "cap:update": "npx cap update",
     "cap:open:ios": "npx cap open ios",
