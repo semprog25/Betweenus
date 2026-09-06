@@ -30,14 +30,25 @@ interface CheckInTabProps {
   userName?: string;
   profilePicture?: string;
   onNavigateToProfile?: () => void;
+  /** Browser shell only — widen layout; native keeps phone-width column */
+  webShell?: boolean;
 }
 
 const findMoodByEntry = (entry: MoodEntry): MoodVisual | undefined =>
   MAIN_MOODS.find((m) => m.name === entry.mainMood) ||
   MAIN_MOODS.find((m) => m.emoji === entry.emoji)
 
-export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePicture = '', onNavigateToProfile }: CheckInTabProps) {
+export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePicture = '', onNavigateToProfile, webShell = false }: CheckInTabProps) {
   const { t, language } = useLanguage();
+  const columnClass = webShell
+    ? 'h-full bu-web-form px-0 sm:px-0 flex flex-col'
+    : 'h-full max-w-md mx-auto px-4 sm:px-6 flex flex-col'
+  const journalColumnClass = webShell
+    ? 'h-full bu-web-form flex flex-col'
+    : 'h-full max-w-md mx-auto flex flex-col'
+  const footerBarClass = webShell
+    ? 'absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-white via-white to-transparent dark:from-gray-950 dark:via-gray-950 pt-8 pb-6 z-10 bu-web-form'
+    : 'absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-white via-white to-transparent dark:from-gray-950 dark:via-gray-950 pt-8 pb-6 z-10 max-w-md mx-auto'
   
   const getMoodTranslation = (moodName: string) => {
     return t(`mood.${moodName.toLowerCase()}`);
@@ -291,7 +302,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
 
     return (
       <div className="h-full overflow-hidden bg-gradient-to-br from-purple-50/50 via-fuchsia-50/30 to-pink-50/50 dark:from-purple-950/30 dark:via-fuchsia-950/20 dark:to-pink-950/30">
-        <div className="h-full max-w-md mx-auto px-4 sm:px-6 flex flex-col">
+        <div className={columnClass}>
           {/* Header with animated name */}
           <div className="flex-shrink-0 pt-4 pb-4">
             <div className="flex items-center justify-between mb-4">
@@ -705,7 +716,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
   if (view === 'mood-select') {
     return (
       <div className="h-full overflow-hidden">
-        <div className="h-full max-w-md mx-auto px-4 sm:px-6 flex flex-col">
+        <div className={columnClass}>
           <div className="flex-shrink-0 pt-4 pb-8">
             <button
               onClick={() => setView('home')}
@@ -747,7 +758,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
   if (view === 'submood-select' && selectedMainMood) {
     return (
       <div className="h-full overflow-hidden">
-        <div className="h-full max-w-md mx-auto px-4 sm:px-6 flex flex-col">
+        <div className={columnClass}>
           <div className="flex-shrink-0 pt-4 pb-8">
             <button
               onClick={() => setView('mood-select')}
@@ -796,7 +807,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
   if (view === 'journal' && selectedMainMood && selectedSubMood) {
     return (
       <div className="h-full overflow-hidden bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
-        <div className="h-full max-w-md mx-auto px-4 sm:px-6 flex flex-col">
+        <div className={columnClass}>
           {/* Header */}
           <div className="flex-shrink-0 pt-6 pb-2">
             <button
@@ -913,7 +924,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
           </div>
 
           {/* Fixed Bottom Actions */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-white via-white to-transparent dark:from-gray-950 dark:via-gray-950 pt-8 pb-6 z-10 max-w-md mx-auto">
+          <div className={footerBarClass}>
             <div className="flex gap-3">
               <Button
                 onClick={() => {
@@ -950,7 +961,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
 
     return (
       <div className="h-full overflow-hidden bg-white dark:bg-gray-900">
-        <div className="h-full max-w-md mx-auto flex flex-col">
+        <div className={journalColumnClass}>
           {/* Header */}
           <div className="flex-shrink-0 px-4 sm:px-6 pt-4 pb-3">
             <button
@@ -1274,7 +1285,7 @@ export function CheckInTab({ userName = 'Friend', profilePicture: propProfilePic
 
     return (
       <div className="h-full overflow-hidden bg-white dark:bg-gray-900">
-        <div className="h-full max-w-md mx-auto flex flex-col">
+        <div className={journalColumnClass}>
           {/* Header */}
           <div className="flex-shrink-0 px-4 sm:px-6 pt-4 pb-3 border-b border-gray-200 dark:border-gray-700">
             <button

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, MessageCircle, Share2, Bookmark, Search, TrendingUp, Clock, Filter, ThumbsUp, ThumbsDown, RefreshCw, X, Flag, Globe, Flame, User } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Search, TrendingUp, Clock, Filter, ThumbsUp, ThumbsDown, RefreshCw, X, Flag, Globe, Flame, User, ArrowLeft } from 'lucide-react';
 import { getCategoryIcon } from './CategoryIcons';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -124,6 +124,7 @@ export function CommunityTab({
   onStreakActivity,
 }: CommunityTabProps) {
   const { t } = useLanguage();
+  const currentUserSession = getSession();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [feedStats, setFeedStats] = useState<{ posts: number; replies: number; upvotes: number; downvotes: number } | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -151,6 +152,10 @@ export function CommunityTab({
   const [showRepliesForPost, setShowRepliesForPost] = useState<Set<string>>(new Set());
   const [replyText, setReplyText] = useState<{ [postId: string]: string }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  /** Web Story Detail — full conversation page (browser shell only). */
+  const [detailPostId, setDetailPostId] = useState<string | null>(null);
+  /** Keep the opened story even if the feed reload drops it from `posts`. */
+  const [detailPostCache, setDetailPostCache] = useState<CommunityPost | null>(null);
   const [userId, setUserId] = useState(() => getActorId() || '');
   const [isTrustedUser, setIsTrustedUser] = useState(false);
   const [flaggingPostId, setFlaggingPostId] = useState<string | null>(null);
@@ -176,13 +181,20 @@ export function CommunityTab({
     setViewMode(initialViewMode)
   }, [initialViewMode])
 
-  // Open a story shared via /story/:id (stashed before nav rewrite to /app)
+  // Open a story shared via /story/:id (pathname, ?p= restore, or stashed deep link)
   useEffect(() => {
-    const storyId = consumeOpenStoryId()
-    if (!storyId) return
-
     let cancelled = false
-    const openSharedStory = async () => {
+
+    const resolveStoryId = (): string | null => {
+      if (typeof window !== 'undefined') {
+        const match = window.location.pathname.match(/^\/story\/([^/]+)/)
+        if (match?.[1]) return decodeURIComponent(match[1])
+      }
+      return consumeOpenStoryId()
+    }
+
+    const openSharedStory = async (storyId: string) => {
+      if (!storyId || cancelled) return
       try {
         const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`
         const actor = getActorId()
@@ -218,23 +230,41 @@ export function CommunityTab({
           next.add(full.id)
           return next
         })
-        window.setTimeout(() => {
-          document.getElementById(`community-post-${full.id}`)?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-          })
-        }, 120)
+        if (webShell) {
+          setDetailPostCache(full)
+          setDetailPostId(full.id)
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/story/')) {
+            window.history.replaceState({}, '', `/story/${encodeURIComponent(full.id)}`)
+          }
+        } else {
+          window.setTimeout(() => {
+            document.getElementById(`community-post-${full.id}`)?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+            })
+          }, 120)
+        }
         toast.message(t('community.openedSharedStory', 'Opened shared story'))
       } catch {
         // non-blocking
       }
     }
 
-    void openSharedStory()
+    const initialId = resolveStoryId()
+    if (initialId) void openSharedStory(initialId)
+
+    const handleOpenStoryEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ storyId?: string }>).detail
+      const id = detail?.storyId || resolveStoryId()
+      if (id) void openSharedStory(id)
+    }
+
+    window.addEventListener('between_us_open_story', handleOpenStoryEvent as EventListener)
     return () => {
       cancelled = true
+      window.removeEventListener('between_us_open_story', handleOpenStoryEvent as EventListener)
     }
-  }, [t])
+  }, [t, webShell])
 
   // Load trusted user status for spam-flagging (deferred — must not block feed paint)
   useEffect(() => {
@@ -572,12 +602,36 @@ export function CommunityTab({
       const full = data?.post;
       if (!full?.id) return;
       setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...full, replies: full.replies || [] } : p)));
+      setDetailPostCache((prev) => (prev?.id === postId ? { ...prev, ...full, replies: full.replies || [] } : prev))
     } catch {
       // non-blocking
     }
   };
 
-  // Handle share to social media
+  const openStoryDetail = (postId: string) => {
+    if (!webShell || !postId) return
+    const fromFeed = posts.find((p) => p.id === postId)
+    if (fromFeed) setDetailPostCache(fromFeed)
+    setDetailPostId(postId)
+    setShowRepliesForPost((prev) => {
+      const next = new Set(prev)
+      next.add(postId)
+      return next
+    })
+    void ensurePostRepliesLoaded(postId)
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', `/story/${encodeURIComponent(postId)}`)
+    }
+  }
+
+  const closeStoryDetail = () => {
+    setDetailPostId(null)
+    setDetailPostCache(null)
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/story/')) {
+      window.history.replaceState({}, '', '/app')
+    }
+  }
+
   // Handle share to social media
   const handleShareToSocial = (post: CommunityPost) => {
     setSelectedPost(post);
@@ -912,17 +966,309 @@ export function CommunityTab({
   };
 
   const filteredPosts = posts;
+  const detailPost = detailPostId
+    ? (posts.find((p) => p.id === detailPostId) || (detailPostCache?.id === detailPostId ? detailPostCache : null))
+    : null
+
+  // Keep the detail cache in sync with feed mutations (votes, replies, saves).
+  useEffect(() => {
+    if (!detailPostId) return
+    const fromFeed = posts.find((p) => p.id === detailPostId)
+    if (fromFeed) setDetailPostCache(fromFeed)
+  }, [posts, detailPostId])
+
+  if (webShell && detailPostId && !detailPost) {
+    return (
+      <div className="bu-web-tab-content">
+        <div className="bu-web-feed space-y-4 pb-8">
+          <button
+            type="button"
+            onClick={closeStoryDetail}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-2 text-sm font-medium text-fuchsia-300 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            {t('community.backToStories')}
+          </button>
+          <div className="flex items-center justify-center rounded-2xl border border-border bg-card py-16">
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (webShell && detailPostId && detailPost) {
+    const replies = Array.isArray(detailPost.replies) ? detailPost.replies : []
+    const isControversial = isControversialPost(detailPost)
+    return (
+      <div className="bu-web-tab-content">
+        <div className="bu-web-feed space-y-5 pb-10">
+          <button
+            type="button"
+            onClick={closeStoryDetail}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-2 text-sm font-medium text-fuchsia-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            {t('community.backToStories')}
+          </button>
+
+          <article className={`rounded-2xl border bg-white p-5 dark:bg-gray-800 ${
+            isControversial
+              ? 'border-orange-500 dark:border-orange-600'
+              : 'border-gray-200 dark:border-gray-700'
+          }`}>
+            {isControversial && (
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1.5 text-sm font-semibold text-white">
+                <Flame className="h-4 w-4" aria-hidden="true" />
+                {t('category.Controversial')}
+              </div>
+            )}
+
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {detailPost.isAnonymous !== false ? (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-400 to-gray-600">
+                    <User className="h-5 w-5 text-white" aria-hidden="true" />
+                  </div>
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500">
+                    {detailPost.profilePicture ? (
+                      <img src={detailPost.profilePicture} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-lg text-white">{(detailPost.username || 'U')[0].toUpperCase()}</span>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                    {detailPost.isAnonymous !== false
+                      ? generateAnonymousName(detailPost.userId || detailPost.id, t)
+                      : (detailPost.username || 'User')}
+                  </p>
+                  <p className="text-xs text-gray-500">{getRelativeTime(detailPost.createdAt, t)}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new Set(savedPosts)
+                  if (next.has(detailPost.id)) {
+                    next.delete(detailPost.id)
+                    toast.success(t('community.postUnsaved'))
+                  } else {
+                    next.add(detailPost.id)
+                    toast.success(t('community.postSaved'))
+                  }
+                  setSavedPosts(next)
+                }}
+                className={`rounded-xl p-2 transition-all ${
+                  savedPosts.has(detailPost.id)
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-600 hover:bg-purple-100 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-purple-900/30'
+                }`}
+                aria-label={t('community.tabSaved')}
+              >
+                <Bookmark className={`h-5 w-5 ${savedPosts.has(detailPost.id) ? 'fill-current' : ''}`} />
+              </button>
+            </div>
+
+            <p className="whitespace-pre-wrap break-words text-lg leading-relaxed text-gray-800 dark:text-gray-100">
+              {detailPost.content}
+            </p>
+
+            {detailPost.imageUrl && (
+              <div className={`mt-4 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700 ${
+                detailPost.imageAspect === 'portrait' ? 'max-w-[280px] aspect-[3/4]' :
+                detailPost.imageAspect === 'wide' ? 'max-w-full aspect-video' :
+                'max-w-[320px] aspect-square'
+              }`}>
+                <img src={detailPost.imageUrl} alt="" className="h-full w-full object-cover" />
+              </div>
+            )}
+
+            {detailPost.categories && detailPost.categories.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {detailPost.categories.map((categoryName, idx) => {
+                  const IconComponent = getCategoryIcon(categoryName)
+                  return (
+                    <span
+                      key={`${categoryName}-${idx}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                    >
+                      <IconComponent className="h-3.5 w-3.5" aria-hidden="true" />
+                      {getCategoryTranslation(categoryName)}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap items-center gap-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => handlePostUpvote(detailPost.id)}
+                className={`inline-flex items-center gap-2 transition-colors ${
+                  detailPost.upvotedBy?.includes(userId)
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400'
+                }`}
+              >
+                <ThumbsUp className={`h-5 w-5 ${detailPost.upvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                <span className="text-sm font-medium">{detailPost.upvotes || 0}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePostDownvote(detailPost.id)}
+                className={`inline-flex items-center gap-2 transition-colors ${
+                  detailPost.downvotedBy?.includes(userId)
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400'
+                }`}
+              >
+                <ThumbsDown className={`h-5 w-5 ${detailPost.downvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                <span className="text-sm font-medium">{detailPost.downvotes || 0}</span>
+              </button>
+              <span className="inline-flex items-center gap-2 text-purple-600 dark:text-purple-400">
+                <MessageCircle className="h-5 w-5" aria-hidden="true" />
+                <span className="text-sm font-medium">
+                  {detailPost.replyCount ?? replies.length} {t('community.repliesCount')}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handleShareToSocial(detailPost)}
+                className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-4 py-2 text-sm font-medium text-white"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                {t('community.shareSocial')}
+              </button>
+            </div>
+          </article>
+
+          <section aria-labelledby="story-conversation-heading" className="space-y-4">
+            <h2 id="story-conversation-heading" className="text-base font-semibold text-foreground">
+              {t('community.conversation')}
+            </h2>
+
+            {replies.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border bg-card/40 px-4 py-6 text-sm text-muted-foreground">
+                {t('community.noRepliesYet')}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {replies.map((reply, idx) => (
+                  <li key={reply.id || `detail-reply-${detailPost.id}-${idx}`} className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-400">
+                      <User className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="rounded-2xl bg-gray-100 px-4 py-3 dark:bg-gray-700">
+                        <p className="mb-1 text-sm font-medium text-purple-600 dark:text-purple-400">
+                          {generateAnonymousName(reply.userId || `reply-${idx}`, t)}
+                        </p>
+                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800 dark:text-white">
+                          {reply.content}
+                        </p>
+                      </div>
+                      <div className="mt-1.5 ml-2 flex flex-wrap items-center gap-3">
+                        <span className="text-xs text-gray-500">{getRelativeTime(reply.createdAt, t)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleReplyUpvote(detailPost.id, reply.id)}
+                          className={`inline-flex items-center gap-1 text-xs transition-colors ${
+                            reply.upvotedBy?.includes(userId)
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-gray-600 hover:text-green-600 dark:text-gray-400'
+                          }`}
+                        >
+                          <ThumbsUp className={`h-3 w-3 ${reply.upvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                          {reply.upvotes || 0}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReplyDownvote(detailPost.id, reply.id)}
+                          className={`inline-flex items-center gap-1 text-xs transition-colors ${
+                            reply.downvotedBy?.includes(userId)
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-gray-600 hover:text-red-600 dark:text-gray-400'
+                          }`}
+                        >
+                          <ThumbsDown className={`h-3 w-3 ${reply.downvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                          {reply.downvotes || 0}
+                        </button>
+                        {currentUserSession && reply.userId === currentUserSession.user?.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReply(detailPost.id, reply.id)}
+                            className="rounded-full bg-red-500 px-2 py-1 text-xs font-medium text-white hover:bg-red-600"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-600">
+                <User className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <textarea
+                  value={replyText[detailPost.id] || ''}
+                  onChange={(e) => setReplyText({ ...replyText, [detailPost.id]: e.target.value })}
+                  placeholder={t('community.writeReply')}
+                  className="w-full resize-none rounded-2xl border-0 bg-gray-100 px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+                  rows={3}
+                />
+                {replyText[detailPost.id]?.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => handleSubmitReply(detailPost.id)}
+                    className="mt-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-4 py-2 text-sm font-medium text-white"
+                  >
+                    {t('community.postReply')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {selectedPost && (
+          <SocialShareCard
+            isOpen={shareModalOpen}
+            onClose={() => {
+              setShareModalOpen(false)
+              setSelectedPost(null)
+            }}
+            postContent={selectedPost.content}
+            bestComment={{
+              text: getTopTwoReplies(selectedPost.replies)[0]?.content || 'No responses yet',
+              upvotes: getTopTwoReplies(selectedPost.replies)[0]?.upvotes || 0,
+            }}
+          />
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className={`h-full overflow-y-auto scrollbar-hide ${webShell ? 'bu-web-tab-content' : ''}`}>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 space-y-4 pb-24">
+    <div className={webShell ? 'bu-web-tab-content' : 'h-full overflow-y-auto scrollbar-hide'}>
+      <div className={webShell
+        ? 'bu-web-feed space-y-4 pb-8'
+        : 'max-w-4xl mx-auto px-4 sm:px-6 py-4 space-y-4 pb-24'
+      }>
         {/* Header */}
         <div className="bg-gradient-to-br from-purple-100 to-fuchsia-100 dark:from-purple-900/30 dark:to-fuchsia-900/30 rounded-2xl p-4 border border-purple-200 dark:border-purple-800">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-600 flex items-center justify-center shrink-0">
               <Globe className="w-5 h-5 text-white" />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <h1 className="text-xl font-semibold text-purple-900 dark:text-purple-100">{t('community.feed')}</h1>
               <p className="text-sm text-purple-700 dark:text-purple-300">
                 {t('community.shareSupport')}
@@ -960,7 +1306,7 @@ export function CommunityTab({
           
           {viewMode === 'all' && (
             <>
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-2" role="group" aria-label="Feed sort">
+              <div className={`flex gap-2 mb-2 ${webShell ? 'flex-wrap' : 'overflow-x-auto scrollbar-hide'}`} role="group" aria-label="Feed sort">
                 {([
                   ['controversial', t('community.filterControversial')],
                   ['trending', t('community.filterTrending')],
@@ -1000,7 +1346,7 @@ export function CommunityTab({
                   {t('community.filterRefresh')}
                 </button>
               </div>
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide" role="group" aria-label="Content type">
+              <div className={`flex gap-2 ${webShell ? 'flex-wrap' : 'overflow-x-auto scrollbar-hide'}`} role="group" aria-label="Content type">
                 {([
                   ['all', t('community.mediaAll') || 'All'],
                   ['media', t('community.mediaWithPictures') || 'With pictures'],
@@ -1048,7 +1394,7 @@ export function CommunityTab({
         </div>
 
         {/* Category Filter */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+        <div className={`flex gap-2 pb-2 ${webShell ? 'flex-wrap' : 'overflow-x-auto scrollbar-hide'}`}>
           <Filter className="w-5 h-5 text-gray-400 shrink-0 mt-1.5" />
           {categories.map(category => {
             const isAll = category.id === 'All';
@@ -1252,7 +1598,19 @@ export function CommunityTab({
                   </div>
 
                   {/* Post Content */}
-                  <div className="mb-4">
+                  <div
+                    className={`mb-4 ${webShell ? 'cursor-pointer rounded-xl outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-400' : ''}`}
+                    role={webShell ? 'link' : undefined}
+                    tabIndex={webShell ? 0 : undefined}
+                    aria-label={webShell ? t('community.openStory') : undefined}
+                    onClick={webShell ? () => openStoryDetail(post.id) : undefined}
+                    onKeyDown={webShell ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openStoryDetail(post.id)
+                      }
+                    } : undefined}
+                  >
                     <p className="text-lg text-gray-800 dark:text-gray-200 leading-relaxed mb-3">
                       {expandedPosts.has(post.id) || post.content.length <= 200
                         ? post.content
@@ -1275,7 +1633,13 @@ export function CommunityTab({
                     {/* Read More Button */}
                     {post.content.length > 200 && (
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (webShell) {
+                            openStoryDetail(post.id)
+                            return
+                          }
                           const newExpanded = new Set(expandedPosts);
                           if (newExpanded.has(post.id)) {
                             newExpanded.delete(post.id);
@@ -1286,7 +1650,9 @@ export function CommunityTab({
                         }}
                         className="text-purple-600 dark:text-purple-400 text-sm font-medium hover:underline"
                       >
-                        {expandedPosts.has(post.id) ? t('community.showLess') : t('community.readMore')}
+                        {webShell
+                          ? t('community.openStory')
+                          : (expandedPosts.has(post.id) ? t('community.showLess') : t('community.readMore'))}
                       </button>
                     )}
                     
@@ -1429,7 +1795,12 @@ export function CommunityTab({
                     </motion.button>
                     
                     <button 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (webShell) {
+                          openStoryDetail(post.id)
+                          return
+                        }
                         const newShowReplies = new Set(showRepliesForPost);
                         if (newShowReplies.has(post.id)) {
                           newShowReplies.delete(post.id);

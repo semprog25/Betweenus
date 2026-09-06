@@ -89,14 +89,14 @@ export function WebAppShell({
   }
 
   return (
-    <div className="bu-web-app flex h-screen overflow-hidden bg-[#05040a] text-zinc-100">
+    <div className="bu-web-app flex h-[100dvh] h-screen overflow-hidden bg-[#05040a] text-zinc-100">
       <aside className="bu-web-sidebar" aria-label="Sidebar navigation">
         <div className="bu-web-sidebar-brand">
           <img src={logoImage} alt="Between Us" className="h-7 w-auto max-w-[150px] object-contain" />
         </div>
 
         <nav className="bu-web-sidebar-nav" aria-label="App">
-          {NAV_ITEMS.filter((item) => item.id !== 'write').map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon
             const isActive = activeNav === item.id
             return (
@@ -144,7 +144,7 @@ export function WebAppShell({
             <h1 className="bu-web-page-title font-[Syne,system-ui,sans-serif] text-xl font-semibold text-white">
               {PAGE_TITLES[activeNav]}
             </h1>
-            {activeNav === 'home' && (
+            {activeNav !== 'write' && (
               <button
                 type="button"
                 onClick={() => setActiveNav('write')}

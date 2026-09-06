@@ -252,9 +252,9 @@ export function ShareTab({ webShell = false, onStreakActivity }: { webShell?: bo
   const tier = subscription?.tier || 'free';
 
   return (
-    <div className="h-full overflow-hidden flex flex-col bg-gradient-to-br from-purple-50/30 via-fuchsia-50/30 to-pink-50/30 dark:from-purple-950/20 dark:via-fuchsia-950/20 dark:to-pink-950/20">
+    <div className={`h-full overflow-hidden flex flex-col ${webShell ? 'bu-web-tab-content' : 'bg-gradient-to-br from-purple-50/30 via-fuchsia-50/30 to-pink-50/30 dark:from-purple-950/20 dark:via-fuchsia-950/20 dark:to-pink-950/20'}`}>
       <div className="flex-1 overflow-y-auto scrollbar-hide">
-        <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-4 pb-6">
+        <div className={webShell ? 'bu-web-form space-y-4 pb-8' : 'max-w-2xl mx-auto p-4 sm:p-6 space-y-4 pb-6'}>
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}

@@ -46,14 +46,17 @@ interface ProfileTabProps {
   userName?: string;
   profilePicture?: string;
   onProfilePictureChange?: (picture: string) => void;
+  /** Browser shell only — use full shell width; native keeps existing padding */
+  webShell?: boolean;
 }
 
-export function ProfileTab({ 
-  selectedLanguages, 
-  onLanguagesChange, 
+export function ProfileTab({
+  selectedLanguages,
+  onLanguagesChange,
   userName = 'Friend',
   profilePicture: propProfilePicture = '',
-  onProfilePictureChange
+  onProfilePictureChange,
+  webShell = false,
 }: ProfileTabProps) {
   const { theme } = useTheme();
   const { t } = useLanguage();
@@ -667,8 +670,8 @@ export function ProfileTab({
   const achievements = getAchievements();
   
   return (
-    <div className="h-full overflow-y-auto scrollbar-hide">
-      <div className="max-w-4xl mx-auto p-6 space-y-6 pb-8">
+    <div className={webShell ? 'bu-web-tab-content' : 'h-full overflow-y-auto scrollbar-hide'}>
+      <div className={webShell ? 'bu-web-profile space-y-6 pb-8' : 'max-w-4xl mx-auto p-6 space-y-6 pb-8'}>
         {/* Not Signed In Notice */}
         {!userSession && (
           <motion.div

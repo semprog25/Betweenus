@@ -397,6 +397,12 @@ html.bu-home-snap {
   overflow: hidden;
 }
 
+@media (min-width: 768px) {
+  .bu-hero {
+    overflow: visible;
+  }
+}
+
 .bu-hero-copy,
 .bu-hero-cards-wrap {
   position: relative;
@@ -2348,9 +2354,13 @@ html.bu-auth-open {
   color: #fff;
 }
 
-/* Authenticated shell */
+/* Authenticated shell — browser only (never applied in Capacitor native) */
 .bu-web-app {
   font-family: Outfit, system-ui, sans-serif;
+  width: 100%;
+  max-width: 100vw;
+  --bu-web-feed-max: 48rem;
+  --bu-web-form-max: 42rem;
 }
 
 .bu-web-sidebar {
@@ -2491,11 +2501,48 @@ html.bu-auth-open {
   flex: 1;
 }
 
+.bu-web-main {
+  min-width: 0;
+}
+
 .bu-web-main-inner {
-  height: 100%;
-  max-width: 48rem;
-  margin: 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  max-width: none;
+  margin: 0;
   padding: 1rem 1rem 1.5rem;
+}
+
+/* Readable content columns inside the full-width shell */
+.bu-web-feed {
+  width: 100%;
+  max-width: var(--bu-web-feed-max);
+  margin-inline: auto;
+}
+
+.bu-web-form {
+  width: 100%;
+  max-width: var(--bu-web-form-max);
+  margin-inline: auto;
+}
+
+.bu-web-profile {
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+}
+
+.bu-web-hint {
+  width: 100%;
+  max-width: var(--bu-web-feed-max);
+  margin-inline: auto;
+  padding-inline: 0;
+}
+
+.bu-web-hint [role='status'] {
+  max-width: none;
+  padding-inline: 0;
 }
 
 .bu-web-rail {
@@ -3421,7 +3468,12 @@ html.bu-auth-open {
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
+  .bu-web-app {
+    --bu-web-feed-max: 44rem;
+    --bu-web-form-max: 40rem;
+  }
+
   .bu-web-sidebar {
     display: flex;
   }
@@ -3442,28 +3494,72 @@ html.bu-auth-open {
     display: none;
   }
 
+  .bu-web-header {
+    padding: 0 1.25rem;
+  }
+
   .bu-web-main-inner {
     padding: 1.25rem 1.5rem 2rem;
   }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
+  .bu-web-app {
+    --bu-web-feed-max: 48rem;
+    --bu-web-form-max: 42rem;
+  }
+
   .bu-web-sidebar {
-    width: 16rem;
+    width: 15.5rem;
+  }
+
+  .bu-web-main-inner {
+    padding: 1.25rem 1.75rem 2rem;
   }
 }
 
 @media (min-width: 1280px) {
+  .bu-web-app {
+    --bu-web-feed-max: 52rem;
+    --bu-web-form-max: 44rem;
+  }
+
+  .bu-web-sidebar {
+    width: 16rem;
+  }
+
   .bu-web-rail {
     display: flex;
+    width: 17.5rem;
   }
 
   .bu-web-body {
     overflow: hidden;
   }
+
+  .bu-web-main-inner {
+    padding: 1.5rem 2rem 2.5rem;
+  }
 }
 
-@media (max-width: 1023px) {
+@media (min-width: 1440px) {
+  .bu-web-app {
+    --bu-web-feed-max: 56rem;
+    --bu-web-form-max: 46rem;
+  }
+
+  .bu-web-rail {
+    width: 18.5rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  .bu-web-app {
+    --bu-web-feed-max: 58rem;
+  }
+}
+
+@media (max-width: 899px) {
   .bu-web-main-inner {
     max-width: none;
     padding-bottom: 0.5rem;

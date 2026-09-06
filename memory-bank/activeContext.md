@@ -1,6 +1,12 @@
 # Active Context
 
-## Pre-deploy verification pass (2026-09-06 late)
+## Web-only desktop responsiveness (2026-09-07)
+
+- **Problem:** Authenticated web app felt like a phone frame — nested `max-w` (shell 48rem + tab `max-w-md`/`max-w-4xl`), Check-in locked to phone column, Community used native `pb-24` scroll nesting, EN missing `community.tabAll` (raw key in UI).
+- **Fix (web-only):** `.bu-web-app` full-bleed shell; sidebar ≥900px; insights rail ≥1280px; readable `.bu-web-feed`/`.bu-web-form`/`.bu-web-profile` columns; `webShell` props on Community/Check-in/Share/Profile; EN `community.tabAll`; category chips wrap on web.
+- **Native preserved:** `App.tsx` still routes Capacitor → `NativeAppContent` with `max-w-md` header/nav; tab defaults `webShell=false`.
+- **Verified:** preview metrics 375–1920; iOS `xcodebuild` BUILD SUCCEEDED; Android `assembleDebug` BUILD SUCCESSFUL. No commit/push/deploy.
+
 
 - Security: `npm run test:security` **37/37** (incl. cross-user ownership) using existing local anon + store-review + ephemeral B — no keys printed/committed.
 - CORS: local Edge source now returns `null` for disallowed/missing Origin (no fallback to first allowlist). **Live Edge still old** until redeploy — evil Origin still reflected as `https://betweenus.fun`.

@@ -95,7 +95,12 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
       markTutorialCompleted({ enableContextualHints: true })
     }
     document.documentElement.classList.remove('light')
-    document.documentElement.classList.add('dark')
+    document.documentElement.classList.add('dark', 'web-browser')
+    document.body.classList.add('web-browser')
+    return () => {
+      document.documentElement.classList.remove('web-browser')
+      document.body.classList.remove('web-browser')
+    }
   }, [])
 
   useEffect(() => {
@@ -118,11 +123,30 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const path = window.location.pathname
-    // Story id is stashed synchronously in readInitialWebNav before Stories mounts.
-    if (path === '/' || path.startsWith('/app') || path.startsWith('/story/')) {
+    // Keep `/story/:id` shareable for Story Detail + deep links.
+    // Only normalize bare marketing `/` into the authenticated app shell.
+    if (path === '/') {
       window.history.replaceState({}, '', '/app')
     }
     markWebEnteredApp()
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const syncStoryPath = () => {
+      const path = window.location.pathname
+      if (!path.startsWith('/story/')) return
+      const id = decodeURIComponent(path.replace(/^\/story\//, '').replace(/\/$/, ''))
+      if (!id) return
+      stashOpenStoryId(id)
+      setActiveNav('stories')
+      window.dispatchEvent(new CustomEvent('between_us_open_story', { detail: { storyId: id } }))
+    }
+
+    syncStoryPath()
+    window.addEventListener('popstate', syncStoryPath)
+    return () => window.removeEventListener('popstate', syncStoryPath)
   }, [])
 
   const handleLanguagesChange = (languages: string[]) => {
@@ -156,7 +180,7 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
 
   return (
     <MobileWebAppInterstitial>
-    <div className="dark h-screen">
+    <div className="dark web-browser h-screen">
       <WebAppShell
         activeNav={activeNav}
         setActiveNav={handleNavChange}
@@ -164,7 +188,7 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
         profilePicture={profilePicture}
         streakRefreshKey={refreshKey}
       >
-        <div className="shrink-0">
+        <div className="bu-web-hint shrink-0">
           <ContextualHint hintId="discover" active={activeNav === 'stories' || activeNav === 'messages'} />
           <ContextualHint hintId="share" active={activeTab === 'share'} />
           <ContextualHint hintId="checkin" active={activeTab === 'checkin'} />
@@ -188,6 +212,7 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
           <CheckInTab
             userName={userName}
             profilePicture={profilePicture}
+            webShell
             onNavigateToProfile={() => setActiveNav('profile')}
           />
         )}
@@ -215,6 +240,7 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
             userName={userName}
             profilePicture={profilePicture}
             onProfilePictureChange={setProfilePicture}
+            webShell
           />
         )}
       </WebAppShell>

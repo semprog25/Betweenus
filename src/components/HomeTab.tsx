@@ -7,6 +7,9 @@ import {
   MessageSquarePlus,
   Sparkles,
   X,
+  BookMarked,
+  LayoutGrid,
+  Lock,
 } from 'lucide-react'
 import { useLanguage } from './LanguageContext'
 import { callServer } from '../utils/supabase/client'
@@ -120,6 +123,14 @@ export function HomeTab({
     openExternalPath('/journal/')
   }
 
+  const handleOpenGuides = () => {
+    openExternalPath('/guides/')
+  }
+
+  const handleOpenFeatures = () => {
+    openExternalPath('/features')
+  }
+
   const handleOpenArticle = (href: string) => {
     openExternalPath(href)
   }
@@ -204,10 +215,16 @@ export function HomeTab({
           <button
             type="button"
             onClick={onNavigateToCheckIn}
-            className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
           >
-            <CheckCircle className="h-4 w-4 shrink-0 text-purple-500" aria-hidden="true" />
-            {t('home.checkIn')}
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 shrink-0 text-purple-500" aria-hidden="true" />
+              {t('home.checkIn')}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              {t('home.checkInPrivate')}
+            </span>
           </button>
         </section>
 
@@ -333,6 +350,52 @@ export function HomeTab({
             </button>
           )}
         </section>
+
+        {webShell && (
+          <section aria-labelledby="home-explore-heading" className="space-y-3">
+            <h2 id="home-explore-heading" className="text-sm font-semibold text-foreground">
+              {t('home.exploreEditorial')}
+            </h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {t('home.exploreEditorialHint')}
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={handleOpenJourney}
+                className="flex min-h-[48px] items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+              >
+                <BookOpen className="h-4 w-4 shrink-0 text-purple-500" aria-hidden="true" />
+                <span>
+                  <span className="block">{t('home.exploreJournal')}</span>
+                  <span className="block text-[11px] font-normal text-muted-foreground">{t('home.exploreJournalHint')}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenGuides}
+                className="flex min-h-[48px] items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+              >
+                <BookMarked className="h-4 w-4 shrink-0 text-purple-500" aria-hidden="true" />
+                <span>
+                  <span className="block">{t('home.exploreGuides')}</span>
+                  <span className="block text-[11px] font-normal text-muted-foreground">{t('home.exploreGuidesHint')}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenFeatures}
+                className="flex min-h-[48px] items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+              >
+                <LayoutGrid className="h-4 w-4 shrink-0 text-purple-500" aria-hidden="true" />
+                <span>
+                  <span className="block">{t('home.exploreFeatures')}</span>
+                  <span className="block text-[11px] font-normal text-muted-foreground">{t('home.exploreFeaturesHint')}</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )
