@@ -5,7 +5,7 @@ export type LanguageCode = 'en' | 'es' | 'zh' | 'hi' | 'de' | 'fr';
 interface LanguageContextType {
   language: LanguageCode;
   setLanguage: (lang: LanguageCode) => void;
-  t: (key: string) => string;
+  t: (key: string, fallback?: string) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -232,9 +232,9 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': 'Load More',
     
     // Share Tab
-    'share.title': 'Write Your Story',
-    'share.subtitle': 'Share gossip, confessions, and stories with the community',
-    'share.placeholder': 'What do you want to share? Write your story here…',
+    'share.title': 'Spill',
+    'share.subtitle': 'Write gossip, confessions, and stories. Anonymous by default — your account email is not shown on the post.',
+    'share.placeholder': 'What do you need to get off your chest?',
     'share.characterCount': 'characters',
     'share.addPhoto': 'Add image or meme',
     'share.imageInvalidType': 'Please select an image (JPEG, PNG, WEBP, GIF)',
@@ -265,15 +265,42 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example3': 'I lied on my resume about my qualifications and got the job...',
     'share.example4': 'I\'ve been stealing small items from work for the past year...',
     
-    'nav.discover': 'Discover',
+    'nav.discover': 'Stories',
     'nav.checkin': 'Check-in',
-    'nav.share': 'Write',
-    'nav.community': 'Community',
+    'nav.share': 'Spill',
+    'nav.community': 'Home',
     'nav.profile': 'Profile',
+    'home.title': 'Home',
+    'home.subtitle': 'Browse Stories, Spill anonymously, or check in privately',
+    'home.quickActions': 'Quick actions',
+    'home.write': 'Spill',
+    'home.checkIn': 'Check-in',
+    'home.browseStories': 'Browse Stories',
+    'home.whatsHappening': "What's happening",
+    'home.seeStories': 'See all',
+    'home.featuredLabel': 'Trending now',
+    'home.noFeatured': 'No Stories to preview yet. Browse the feed or Spill the first one.',
+    'home.writeFirst': 'Spill a story',
+    'home.loadingStories': 'Loading Stories',
+    'home.firstSession.eyebrow': 'Quick orientation',
+    'home.firstSession.title': 'What Between Us is',
+    'home.firstSession.body': 'An anonymous community for gossip, secrets, and real talk. Read first — then Spill when you are ready.',
+    'home.firstSession.pointStories': 'Stories = the public anonymous feed',
+    'home.firstSession.pointSpill': 'Spill = write a post (usually Anonymous)',
+    'home.firstSession.pointPrivate': 'Check-ins stay private — never on the feed',
+    'home.firstSession.cta': 'Start with Stories',
+    'home.firstSession.skip': "I'll look around",
+    'home.firstSession.dismiss': 'Dismiss orientation',
+    'home.fromJourney': 'From the Journal',
+    'home.browseJourney': 'Browse',
+    'home.journeyEmpty': 'Explore editorial stories in the Journal',
+    'profile.journey': 'Journey',
+    'profile.journeyDesc': 'Editorial stories & reflections',
+    'discover.filtersLabel': 'Story filters',
 
     // Discover Tab (text-first feed)
-    'discover.title': 'Discover',
-    'discover.subtitle': 'Read, vote, and join the conversation',
+    'discover.title': 'Stories',
+    'discover.subtitle': 'Real conversations from the community',
     'discover.loading': 'Loading posts...',
     'discover.empty': 'No posts yet',
     'discover.emptyHint': 'Be the first to share something — tap Write to post.',
@@ -300,8 +327,9 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'discover.delete': 'Delete comment',
     'discover.loadError': 'Failed to load posts',
     'discover.filter.trending': 'Trending',
-    'discover.filter.newest': 'New',
-    'discover.filter.hot': 'Hot',
+    'discover.filter.newest': 'Newest',
+    'discover.filter.hot': 'Discussed',
+    'discover.filter.discussed': 'Discussed',
     'discover.filter.random': 'Random',
     
     // Legacy listen keys (mapped for profile/help compatibility)
@@ -324,7 +352,8 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     
     // Community Tab
     'community.title': 'Community Support',
-    'community.tabAll': 'All Posts',
+    'community.openedSharedStory': 'Opened shared story',
+    'community.storyNotFound': 'Story not found',
     'community.tabSaved': 'Saved',
     'community.statPosts': 'Posts',
     'community.statReplies': 'Replies',
@@ -334,6 +363,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'community.filterTrending': 'Trending',
     'community.filterControversial': 'Controversial',
     'community.filterNew': 'New',
+    'community.filterDiscussed': 'Discussed',
+    'community.filterAllFeed': 'All',
+    'community.mediaAll': 'All',
+    'community.mediaWithPictures': 'With pictures',
+    'community.mediaTextOnly': 'Text only',
     'community.filterRefresh': 'Refresh',
     'community.subtitle': 'Connect with others on similar journeys',
     'community.trending': 'Trending Topics',
@@ -511,12 +545,45 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.safety.feature2': 'Your privacy is our priority',
     'tutorial.safety.feature3': 'Report harmful content',
     'tutorial.safety.feature4': 'Be kind, supportive, and respectful',
+    'tutorial.levels.title': 'Level Up & Earn Badges',
+    'tutorial.levels.description': 'Track your progress with levels and achievement badges. Every interaction counts towards your journey in the Between Us community!',
+    'tutorial.levels.feature1': 'Progress through 5 levels',
+    'tutorial.levels.feature2': 'Earn activity points',
+    'tutorial.levels.feature3': 'Unlock achievement badges',
+    'tutorial.levels.feature4': 'Track your journey',
     'tutorial.modal.title': 'Getting Started with Between Us',
     'tutorial.modal.description': 'Learn how to use Between Us for mental wellness',
     'tutorial.step': 'Step {current} of {total}',
     'tutorial.previous': 'Previous',
     'tutorial.next': 'Next',
+    'tutorial.back': 'Back',
     'tutorial.getStarted': 'Get Started',
+
+    // Short welcome (post-setup)
+    'welcome.title': 'Welcome to Between Us',
+    'welcome.subtitle': 'Anonymous Stories, honest Spills, and private check-ins — without performing for an audience.',
+    'welcome.benefit.share': 'Spill anonymously',
+    'welcome.benefit.discover': 'Read real Stories',
+    'welcome.benefit.checkin': 'Private check-ins',
+    'welcome.cta.start': 'Start with Stories',
+    'welcome.cta.howItWorks': 'How it works',
+    'welcome.tour.progress': 'Step {current} of {total}',
+    'welcome.tour.skip': 'Skip',
+    'welcome.tour.back': 'Back',
+    'welcome.tour.next': 'Next',
+    'welcome.tour.discover.title': 'Stories',
+    'welcome.tour.discover.body': 'Browse anonymous posts — trending, new, or most discussed.',
+    'welcome.tour.write.title': 'Spill',
+    'welcome.tour.write.body': 'Write what you can’t say under your real name. Anonymous by default.',
+    'welcome.tour.checkin.title': 'Check-in',
+    'welcome.tour.checkin.body': 'Track how you feel privately — separate from the public feed.',
+
+    // Contextual first-visit hints
+    'hint.discover': 'Stories: browse anonymous posts, filter, and join the conversation.',
+    'hint.share': 'Spill: write what you can’t say anywhere else. Posts stay Anonymous by default.',
+    'hint.checkin': 'Check-in: private mood notes — never shown on the public Stories feed.',
+    'hint.community': 'Home: overview + shortcuts. Start with Stories if you’re new.',
+    'hint.dismiss': 'Dismiss tip',
     
     // Auth
     'auth.createAccount': 'Create Your Account',
@@ -1013,6 +1080,29 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.next': 'Siguiente',
     'tutorial.back': 'Atrás',
     'tutorial.getStarted': 'Comenzar',
+
+    'welcome.title': 'Bienvenido a Between Us',
+    'welcome.subtitle': 'Un espacio privado para compartir con honestidad, descubrir conversaciones reales y hacer check-in contigo.',
+    'welcome.benefit.share': 'Comparte de forma anónima',
+    'welcome.benefit.discover': 'Descubre conversaciones reales',
+    'welcome.benefit.checkin': 'Haz check-in contigo',
+    'welcome.cta.start': 'Empezar a explorar',
+    'welcome.cta.howItWorks': 'Cómo funciona',
+    'welcome.tour.progress': 'Paso {current} de {total}',
+    'welcome.tour.skip': 'Omitir',
+    'welcome.tour.back': 'Atrás',
+    'welcome.tour.next': 'Siguiente',
+    'welcome.tour.discover.title': 'Descubrir',
+    'welcome.tour.discover.body': 'Explora conversaciones: lo trending, lo nuevo o lo hot.',
+    'welcome.tour.write.title': 'Spill',
+    'welcome.tour.write.body': 'Di lo que no puedes decir con tu nombre real. Anónimo por defecto.',
+    'welcome.tour.checkin.title': 'Check-in',
+    'welcome.tour.checkin.body': 'Sigue cómo te sientes con el tiempo, en privado.',
+    'hint.discover': 'Historias: lee publicaciones anónimas, filtra y únete a la conversación.',
+    'hint.share': 'Spill: escribe lo que no puedes decir en otro lado. Anónimo por defecto.',
+    'hint.checkin': 'Check-in: notas privadas de ánimo — nunca en el feed de Historias.',
+    'hint.community': 'Únete a la conversación con respuestas y votos.',
+    'hint.dismiss': 'Cerrar consejo',
     
     // Check-in Tab
     'checkin.welcome': '¡Bienvenido de nuevo!',
@@ -1197,7 +1287,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': 'Cargar Más',
     
     // Share Tab
-    'share.title': 'Comparte Tus Pensamientos',
+    'share.title': 'Spill',
     'share.subtitle': 'Tu identidad es completamente anónima',
     'share.placeholder': '¿Qué tienes en mente? Comparte tus pensamientos de forma anónima...',
     'share.characterCount': 'caracteres',
@@ -1230,10 +1320,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example4': 'He estado robando artículos pequeños del trabajo durante el último año...',
     
     // Navigation
-    'nav.checkin': 'Registro',
-    'nav.share': 'Compartir',
+    'nav.discover': 'Historias',
+    'nav.checkin': 'Check-in',
+    'nav.share': 'Spill',
     'nav.listen': 'Escuchar',
-    'nav.community': 'Comunidad',
+    'nav.community': 'Inicio',
     'nav.profile': 'Perfil',
     
     // Auth
@@ -1476,6 +1567,29 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.next': '下一步',
     'tutorial.back': '返回',
     'tutorial.getStarted': '开始使用',
+
+    'welcome.title': '欢迎来到 Between Us',
+    'welcome.subtitle': '一个可以诚实分享、发现真实对话并与自己签到的私密空间。',
+    'welcome.benefit.share': '匿名分享',
+    'welcome.benefit.discover': '发现真实对话',
+    'welcome.benefit.checkin': '与自己签到',
+    'welcome.cta.start': '开始探索',
+    'welcome.cta.howItWorks': '如何使用',
+    'welcome.tour.progress': '第 {current} / {total} 步',
+    'welcome.tour.skip': '跳过',
+    'welcome.tour.back': '返回',
+    'welcome.tour.next': '下一步',
+    'welcome.tour.discover.title': '发现',
+    'welcome.tour.discover.body': '探索对话——热门、最新或火爆内容。',
+    'welcome.tour.write.title': '倾诉',
+    'welcome.tour.write.body': '写下你不敢用真名说的话。默认匿名。',
+    'welcome.tour.checkin.title': '签到',
+    'welcome.tour.checkin.body': '私下追踪你的心情变化。',
+    'hint.discover': '故事：浏览匿名帖子，筛选并参与讨论。',
+    'hint.share': '倾诉：写下别处不能说的话。默认匿名。',
+    'hint.checkin': '签到：私密心情笔记——不会出现在公开故事动态。',
+    'hint.community': '通过回复和投票加入对话。',
+    'hint.dismiss': '关闭提示',
     
     // Check-in Tab
     'checkin.welcome': '欢迎回来！',
@@ -1660,7 +1774,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': '加载更多',
     
     // Share Tab
-    'share.title': '分享您的想法',
+    'share.title': '倾诉',
     'share.subtitle': '您的身份完全匿名',
     'share.placeholder': '您在想什么？匿名分享您的想法...',
     'share.characterCount': '字符',
@@ -1693,10 +1807,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example4': '我在过去的一年里一直从工作中偷小东西...',
     
     // Navigation
+    'nav.discover': '故事',
     'nav.checkin': '签到',
-    'nav.share': '分享',
+    'nav.share': '倾诉',
     'nav.listen': '倾听',
-    'nav.community': '社区',
+    'nav.community': '首页',
     'nav.profile': '个人资料',
     
     // Listen Tab
@@ -1843,6 +1958,29 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.next': 'अगला',
     'tutorial.back': 'पीछे',
     'tutorial.getStarted': 'शुरू करें',
+
+    'welcome.title': 'Between Us में आपका स्वागत है',
+    'welcome.subtitle': 'ईमानदारी से साझा करने, असली बातचीत खोजने और खुद से चेक-इन करने की निजी जगह।',
+    'welcome.benefit.share': 'अनाम रूप से साझा करें',
+    'welcome.benefit.discover': 'असली बातचीत खोजें',
+    'welcome.benefit.checkin': 'खुद से चेक-इन करें',
+    'welcome.cta.start': 'एक्सप्लोर शुरू करें',
+    'welcome.cta.howItWorks': 'यह कैसे काम करता है',
+    'welcome.tour.progress': 'चरण {current} / {total}',
+    'welcome.tour.skip': 'छोड़ें',
+    'welcome.tour.back': 'पीछे',
+    'welcome.tour.next': 'अगला',
+    'welcome.tour.discover.title': 'डिस्कवर',
+    'welcome.tour.discover.body': 'बातचीत देखें — ट्रेंडिंग, नया या हॉट।',
+    'welcome.tour.write.title': 'स्पिल',
+    'welcome.tour.write.body': 'जो आप असली नाम से नहीं कह सकते, वह लिखें। डिफ़ॉल्ट रूप से अनाम।',
+    'welcome.tour.checkin.title': 'चेक-इन',
+    'welcome.tour.checkin.body': 'निजी तौर पर अपनी भावनाओं को ट्रैक करें।',
+    'hint.discover': 'कहानियाँ: अनाम पोस्ट देखें, फ़िल्टर करें और बातचीत में शामिल हों।',
+    'hint.share': 'स्पिल: जो और कहीं नहीं कह सकते वह लिखें। डिफ़ॉल्ट अनाम।',
+    'hint.checkin': 'चेक-इन: निजी मूड नोट्स — सार्वजनिक कहानियों में कभी नहीं।',
+    'hint.community': 'जवाब और वोट के साथ बातचीत में शामिल हों।',
+    'hint.dismiss': 'सुझाव बंद करें',
     
     // Check-in Tab
     'checkin.welcome': 'वापसी पर स्वागत है!',
@@ -2027,7 +2165,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': 'और लोड करें',
     
     // Share Tab
-    'share.title': 'अपने विचार साझा करें',
+    'share.title': 'स्पिल',
     'share.subtitle': 'आपकी पहचान पूरी तरह से गुमनाम है',
     'share.placeholder': 'आपके दिमाग में क्या है? अपने विचार गुमनाम रूप से साझा करें...',
     'share.characterCount': 'अक्षर',
@@ -2060,10 +2198,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example4': 'मैं पिछले एक साल से काम से छोटी-छोटी चीजें चुरा रहा हूं...',
     
     // Navigation
+    'nav.discover': 'कहानियाँ',
     'nav.checkin': 'चेक-इन',
-    'nav.share': 'साझा करें',
+    'nav.share': 'स्पिल',
     'nav.listen': 'सुनें',
-    'nav.community': 'समुदाय',
+    'nav.community': 'होम',
     'nav.profile': 'प्रोफ़ाइल',
     
     // Listen Tab
@@ -2210,6 +2349,29 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.next': 'Weiter',
     'tutorial.back': 'Zurück',
     'tutorial.getStarted': 'Loslegen',
+
+    'welcome.title': 'Willkommen bei Between Us',
+    'welcome.subtitle': 'Ein privater Raum, um ehrlich zu teilen, echte Gespräche zu entdecken und bei dir einzuchecken.',
+    'welcome.benefit.share': 'Anonym teilen',
+    'welcome.benefit.discover': 'Echte Gespräche entdecken',
+    'welcome.benefit.checkin': 'Bei dir einchecken',
+    'welcome.cta.start': 'Jetzt entdecken',
+    'welcome.cta.howItWorks': 'So funktioniert\'s',
+    'welcome.tour.progress': 'Schritt {current} von {total}',
+    'welcome.tour.skip': 'Überspringen',
+    'welcome.tour.back': 'Zurück',
+    'welcome.tour.next': 'Weiter',
+    'welcome.tour.discover.title': 'Entdecken',
+    'welcome.tour.discover.body': 'Erkunde Gespräche — Trending, Neu oder Hot.',
+    'welcome.tour.write.title': 'Spill',
+    'welcome.tour.write.body': 'Schreib, was du unter deinem echten Namen nicht sagen kannst. Standardmäßig anonym.',
+    'welcome.tour.checkin.title': 'Check-in',
+    'welcome.tour.checkin.body': 'Verfolge privat, wie du dich fühlst.',
+    'hint.discover': 'Stories: anonyme Beiträge lesen, filtern und mitreden.',
+    'hint.share': 'Spill: schreib, was du woanders nicht sagen kannst. Standardmäßig anonym.',
+    'hint.checkin': 'Check-in: private Stimmungsnotizen — nie im öffentlichen Stories-Feed.',
+    'hint.community': 'Mach mit bei Gesprächen durch Antworten und Votes.',
+    'hint.dismiss': 'Tipp schließen',
     
     // Check-in Tab
     'checkin.welcome': 'Willkommen zurück!',
@@ -2394,7 +2556,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': 'Mehr Laden',
     
     // Share Tab
-    'share.title': 'Teile Deine Gedanken',
+    'share.title': 'Spill',
     'share.subtitle': 'Deine Identität ist völlig anonym',
     'share.placeholder': 'Was beschäftigt dich? Teile deine Gedanken anonym...',
     'share.characterCount': 'Zeichen',
@@ -2427,10 +2589,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example4': 'Ich habe im letzten Jahr kleine Gegenstände von der Arbeit gestohlen...',
     
     // Navigation
+    'nav.discover': 'Stories',
     'nav.checkin': 'Check-in',
-    'nav.share': 'Teilen',
+    'nav.share': 'Spill',
     'nav.listen': 'Zuhören',
-    'nav.community': 'Gemeinschaft',
+    'nav.community': 'Start',
     'nav.profile': 'Profil',
     
     // Listen Tab
@@ -2577,6 +2740,29 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'tutorial.next': 'Suivant',
     'tutorial.back': 'Retour',
     'tutorial.getStarted': 'Commencer',
+
+    'welcome.title': 'Bienvenue sur Between Us',
+    'welcome.subtitle': 'Un espace privé pour partager honnêtement, découvrir de vraies conversations et faire un check-in avec soi-même.',
+    'welcome.benefit.share': 'Partager anonymement',
+    'welcome.benefit.discover': 'Découvrir de vraies conversations',
+    'welcome.benefit.checkin': 'Faire un check-in avec soi',
+    'welcome.cta.start': 'Commencer à explorer',
+    'welcome.cta.howItWorks': 'Comment ça marche',
+    'welcome.tour.progress': 'Étape {current} sur {total}',
+    'welcome.tour.skip': 'Passer',
+    'welcome.tour.back': 'Retour',
+    'welcome.tour.next': 'Suivant',
+    'welcome.tour.discover.title': 'Découvrir',
+    'welcome.tour.discover.body': 'Explorez les conversations — tendances, nouveautés ou hot.',
+    'welcome.tour.write.title': 'Spill',
+    'welcome.tour.write.body': 'Écrivez ce que vous ne pouvez pas dire sous votre vrai nom. Anonyme par défaut.',
+    'welcome.tour.checkin.title': 'Check-in',
+    'welcome.tour.checkin.body': 'Suivez comment vous vous sentez, en privé.',
+    'hint.discover': 'Stories : lisez des posts anonymes, filtrez et rejoignez la discussion.',
+    'hint.share': 'Spill : écrivez ce que vous ne pouvez pas dire ailleurs. Anonyme par défaut.',
+    'hint.checkin': 'Check-in : notes d\'humeur privées — jamais sur le fil Stories public.',
+    'hint.community': 'Rejoignez la conversation avec des réponses et des votes.',
+    'hint.dismiss': 'Fermer l\'astuce',
     
     // Check-in Tab
     'checkin.welcome': 'Bon retour!',
@@ -2761,7 +2947,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'journal.loadMore': 'Charger Plus',
     
     // Share Tab
-    'share.title': 'Partagez Vos Pensées',
+    'share.title': 'Spill',
     'share.subtitle': 'Votre identité est complètement anonyme',
     'share.placeholder': 'Qu\'avez-vous en tête? Partagez vos pensées de manière anonyme...',
     'share.characterCount': 'caractères',
@@ -2794,10 +2980,11 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     'share.example4': 'Je vole de petits objets au travail depuis un an...',
     
     // Navigation
-    'nav.checkin': 'Enregistrement',
-    'nav.share': 'Partager',
+    'nav.discover': 'Stories',
+    'nav.checkin': 'Check-in',
+    'nav.share': 'Spill',
     'nav.listen': 'Écouter',
-    'nav.community': 'Communauté',
+    'nav.community': 'Accueil',
     'nav.profile': 'Profil',
     
     // Listen Tab
@@ -2819,9 +3006,9 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     
     // Community Tab
     'community.title': 'Soutien Communautaire',
-    'community.tabAll': 'Tous les Messages',
+    'community.tabAll': 'Toutes les publications',
     'community.tabSaved': 'Enregistrés',
-    'community.statPosts': 'Messages',
+    'community.statPosts': 'Publications',
     'community.statReplies': 'Réponses',
     'community.statUpvotes': 'Votes Pour',
     'community.statDownvotes': 'Votes Contre',
@@ -2910,9 +3097,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const t = (key: string): string => {
-    // Try current language, then fallback to English, then return key
-    return translations[language]?.[key] || translations['en']?.[key] || key;
+  const t = (key: string, fallback?: string): string => {
+    // Current language → English → optional caller fallback → key (last resort)
+    return (
+      translations[language]?.[key] ||
+      translations['en']?.[key] ||
+      fallback ||
+      key
+    )
   };
 
   return (

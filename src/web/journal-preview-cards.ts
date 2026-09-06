@@ -5,39 +5,27 @@ export interface JournalPreviewCard {
   theme: 'rose' | 'violet' | 'sunset' | 'ocean'
   imageUrl: string
   imageAlt: string
+  href?: string
+  slug?: string
 }
 
-export const JOURNAL_PREVIEW_CARDS: JournalPreviewCard[] = [
-  {
-    id: 'journal-1',
-    title: 'Healing After a Breakup',
-    copy: 'What it looks like to rebuild trust in yourself when a relationship ends.',
-    theme: 'rose',
-    imageUrl: '/assets/journal/healing-breakup.jpg',
-    imageAlt: 'Person sitting alone by a window, reflecting after a breakup',
-  },
-  {
-    id: 'journal-2',
-    title: 'When Friendship Hurts',
-    copy: 'The quiet moments when someone close becomes the hardest person to talk to.',
-    theme: 'violet',
-    imageUrl: '/assets/journal/friendship-hurts.jpg',
-    imageAlt: 'Two friends sitting together in a thoughtful, distant moment',
-  },
-  {
-    id: 'journal-3',
-    title: 'Learning to Let Go',
-    copy: 'Reflections on releasing what you cannot control — and finding peace anyway.',
-    theme: 'sunset',
-    imageUrl: '/assets/journal/learning-let-go.jpg',
-    imageAlt: 'Mountain landscape at sunrise symbolizing peace and letting go',
-  },
-  {
-    id: 'journal-4',
-    title: 'The Power of Honest Conversations',
-    copy: 'Why saying the unsaid out loud — even anonymously — can change everything.',
-    theme: 'ocean',
-    imageUrl: '/assets/journal/honest-conversations.jpg',
-    imageAlt: 'People having an open, honest conversation together',
-  },
-]
+export interface JournalHomeCardsPayload {
+  generatedAt?: string
+  articles: JournalPreviewCard[]
+}
+
+/**
+ * Loads homepage Journal cards from the static generator output.
+ * Empty array = tasteful empty state (no fabricated placeholders).
+ */
+export async function loadJournalHomeCards(): Promise<JournalPreviewCard[]> {
+  try {
+    const res = await fetch('/journal/home-cards.json', { cache: 'no-cache' })
+    if (!res.ok) return []
+    const data = (await res.json()) as JournalHomeCardsPayload
+    if (!Array.isArray(data?.articles)) return []
+    return data.articles.filter((card) => card?.title && card?.href)
+  } catch {
+    return []
+  }
+}

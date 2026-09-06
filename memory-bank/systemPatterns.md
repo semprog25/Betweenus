@@ -21,5 +21,6 @@ Never trust client: `userId`, `ownerId`, `role`, `premium`, moderation, ads flag
 - Deep links: story URLs open website; Universal/App Links when configured (not yet)
 
 ## Personal journal vs editorial Journal
-- Personal: KV `journal:*` — private user diary in Check-in tab
-- Editorial Between Us Journal: not built yet — Phase 4 (team-only CMS)
+- Personal: KV `journal:*` — private user diary in Check-in tab (unchanged)
+- Editorial Between Us Journal: PostgreSQL `journal_articles` + Edge `/landing-cms/*` + static `public/journal/` + `journal-admin.html`
+- Public article ads: presentation-only in `scripts/generateJournal.js` via `journal-ad-placement.cjs` (word-count gated slots). CMS body stays content-only. Ads stay off until AdSense IDs + CMP consent env flags.

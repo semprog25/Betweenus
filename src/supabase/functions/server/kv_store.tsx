@@ -94,3 +94,93 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
   }
   return data?.map((d) => d.value) ?? [];
 };
+
+/** Returns key+value rows for a prefix (needed for complete account deletion). */
+export const getEntriesByPrefix = async (
+  prefix: string,
+): Promise<Array<{ key: string; value: any }>> => {
+  const supabase = client()
+  const { data, error } = await supabase
+    .from("kv_store_6c9b0e48")
+    .select("key, value")
+    .like("key", prefix + "%")
+  if (error) throw new Error(error.message)
+  return (data || []).map((row: { key: string; value: any }) => ({
+    key: row.key,
+    value: row.value,
+  }))
+};
+
+export type CommunityFeedKind =
+  | "controversial"
+  | "trending"
+  | "newest"
+  | "discussed"
+  | "all";
+
+export type CommunityMediaFilter = "all" | "media" | "text";
+
+export interface CommunityFeedCursor {
+  score: number
+  ts: number
+  id: string
+}
+
+export interface CommunityFeedIdRow {
+  post_id: string
+  score: number
+  ts: number
+}
+
+/** Ranked post IDs via SQL RPC — does not scan full post JSON into Edge. */
+export const getCommunityFeedIds = async (options: {
+  feed: CommunityFeedKind
+  limit: number
+  media?: CommunityMediaFilter
+  languages?: string[]
+  category?: string | null
+  q?: string | null
+  cursor?: CommunityFeedCursor | null
+}): Promise<CommunityFeedIdRow[]> => {
+  const supabase = client()
+  const { data, error } = await supabase.rpc("community_feed_ids", {
+    p_feed: options.feed,
+    p_limit: options.limit,
+    p_media: options.media || "all",
+    p_languages: options.languages && options.languages.length > 0 ? options.languages : null,
+    p_category: options.category || null,
+    p_q: options.q || null,
+    p_cursor_score: options.cursor ? options.cursor.score : null,
+    p_cursor_ts: options.cursor ? options.cursor.ts : null,
+    p_cursor_id: options.cursor ? options.cursor.id : null,
+  })
+  if (error) throw new Error(error.message)
+  return (data || []).map((row: any) => ({
+    post_id: String(row.post_id),
+    score: Number(row.score) || 0,
+    ts: Number(row.ts) || 0,
+  }))
+}
+
+export const getCommunityFeedStats = async (options: {
+  media?: CommunityMediaFilter
+  languages?: string[]
+  category?: string | null
+  q?: string | null
+}): Promise<{ posts: number; replies: number; upvotes: number; downvotes: number }> => {
+  const supabase = client()
+  const { data, error } = await supabase.rpc("community_feed_stats", {
+    p_media: options.media || "all",
+    p_languages: options.languages && options.languages.length > 0 ? options.languages : null,
+    p_category: options.category || null,
+    p_q: options.q || null,
+  })
+  if (error) throw new Error(error.message)
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    posts: Number(row?.posts) || 0,
+    replies: Number(row?.replies) || 0,
+    upvotes: Number(row?.upvotes) || 0,
+    downvotes: Number(row?.downvotes) || 0,
+  }
+}

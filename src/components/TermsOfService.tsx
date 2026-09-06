@@ -193,7 +193,8 @@ export function TermsOfService({ isOpen, onClose }: TermsOfServiceProps) {
               For questions about these Terms of Service:
             </p>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li>Email: support@betweenus.app</li>
+              <li>Email: support@betweenus.semprog.de</li>
+              <li>Legal: legal@betweenus.semprog.de</li>
               <li>Use the "Send Feedback" feature in the app</li>
             </ul>
           </section>

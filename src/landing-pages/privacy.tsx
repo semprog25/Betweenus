@@ -80,7 +80,7 @@ export function PrivacyPage({ onNavigate }: PrivacyPageProps) {
             <h4 className="font-semibold text-purple-300 mb-2">Technical Information</h4>
             <ul className="list-disc list-inside space-y-2">
               <li>Device type and operating system</li>
-              <li>App usage analytics (anonymized)</li>
+              <li>App activity stored with your account (streaks, posts) — we do not currently use a third-party analytics SDK</li>
               <li>Error logs for debugging</li>
             </ul>
           </Section>
@@ -187,8 +187,9 @@ export function PrivacyPage({ onNavigate }: PrivacyPageProps) {
             </p>
             <ul className="list-disc list-inside space-y-2 mt-4">
               <li><strong>Essential cookies:</strong> Required for authentication and app functionality</li>
-              <li><strong>Analytics:</strong> Anonymized usage data to improve the app</li>
-              <li><strong>No advertising cookies:</strong> We don't use cookies for targeted advertising</li>
+              <li><strong>Analytics:</strong> We do not currently use a third-party analytics SDK on the website</li>
+              <li><strong>Website advertising:</strong> The Between Us Journal (website) may use Google AdSense to show ads. When ads are enabled, Google and partners may use cookies or similar technologies, including for advertising, subject to applicable consent requirements in the EEA/UK. Ads are not shown inside the Journal CMS editor.</li>
+              <li><strong>Mobile ads:</strong> The Between Us mobile apps may use Google AdMob separately from website AdSense.</li>
             </ul>
           </Section>
 

@@ -2,25 +2,34 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { CheckInTab } from '../components/CheckInTab'
 import { CommunityTab } from '../components/CommunityTab'
+import { HomeTab } from '../components/HomeTab'
 import { ProfileTab } from '../components/ProfileTab'
+import { ContextualHint } from '../components/ContextualHint'
 import { Toaster } from '../components/ui/sonner'
 import { useTheme } from '../components/ThemeProvider'
 import { useLanguage } from '../components/LanguageContext'
 import { getUserProfile, signOut, type User } from '../utils/auth'
 import { syncUserTimezone } from '../utils/timezone-sync'
+import {
+  markOnboardingCompleted,
+  markTutorialCompleted,
+  markWebEnteredApp,
+  seedOnboardingMigration,
+  shouldLandWebOnStories,
+} from '../utils/onboarding-state'
+import { stashOpenStoryId } from '../utils/deep-links'
 import { notifyAuthChanged } from './use-auth-state'
 import {
   WebAppShell,
-  navCommunityView,
   navToTab,
   type WebNavId,
 } from './web-app-shell'
 import { useDailyStreakRefresh } from './daily-streak-panel'
+import { MobileWebAppInterstitial } from './mobile-web-app-interstitial'
 import { toast } from 'sonner@2.0.3'
 import './web.css'
 
 const ShareTab = lazy(() => import('../components/ShareTab').then((m) => ({ default: m.ShareTab })))
-const DiscoverTab = lazy(() => import('../components/DiscoverTab').then((m) => ({ default: m.DiscoverTab })))
 
 interface AuthenticatedWebAppProps {
   user: User | null
@@ -38,11 +47,26 @@ function pathToNav(path: string): WebNavId | null {
   return null
 }
 
+function readInitialWebNav(): WebNavId {
+  if (typeof window === 'undefined') return 'home'
+  const path = window.location.pathname
+  if (path.startsWith('/story/')) {
+    const id = decodeURIComponent(path.replace(/^\/story\//, '').replace(/\/$/, ''))
+    if (id) stashOpenStoryId(id)
+    return 'stories'
+  }
+  const fromPath = pathToNav(path)
+  if (fromPath && !(fromPath === 'home' && shouldLandWebOnStories() && (path === '/app' || path === '/'))) {
+    return fromPath
+  }
+  return shouldLandWebOnStories() ? 'stories' : 'home'
+}
+
 export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   const { theme } = useTheme()
   const { setLanguage } = useLanguage()
   const { refreshKey, refreshStreak } = useDailyStreakRefresh()
-  const [activeNav, setActiveNav] = useState<WebNavId>('home')
+  const [activeNav, setActiveNav] = useState<WebNavId>(() => readInitialWebNav())
   const [userName, setUserName] = useState(user?.user_metadata?.name || 'Friend')
   const [profilePicture, setProfilePicture] = useState(user?.user_metadata?.avatar_url || '')
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => {
@@ -59,8 +83,17 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   })
 
   useEffect(() => {
-    localStorage.setItem('hasCompletedOnboarding', 'true')
-    localStorage.setItem('hasCompletedTutorial', 'true')
+    // Migrate BEFORE writing completion flags so existing web users are not
+    // treated as brand-new for contextual hints.
+    seedOnboardingMigration()
+    const isLegacyUser = localStorage.getItem('between_us_hints_seeded') === 'legacy'
+    markOnboardingCompleted()
+    // Web has no native welcome carousel — enter the app shell directly.
+    if (isLegacyUser) {
+      localStorage.setItem('hasCompletedTutorial', 'true')
+    } else {
+      markTutorialCompleted({ enableContextualHints: true })
+    }
     document.documentElement.classList.remove('light')
     document.documentElement.classList.add('dark')
   }, [])
@@ -85,23 +118,11 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const path = window.location.pathname
-    if (path.startsWith('/story/')) {
-      const id = decodeURIComponent(path.replace(/^\/story\//, '').replace(/\/$/, ''))
-      if (id) {
-        try {
-          localStorage.setItem('between_us_open_story_id', id)
-        } catch {
-          // ignore
-        }
-        setActiveNav('stories')
-      }
-    } else {
-      const navFromPath = pathToNav(path)
-      if (navFromPath) setActiveNav(navFromPath)
-    }
+    // Story id is stashed synchronously in readInitialWebNav before Stories mounts.
     if (path === '/' || path.startsWith('/app') || path.startsWith('/story/')) {
       window.history.replaceState({}, '', '/app')
     }
+    markWebEnteredApp()
   }, [])
 
   const handleLanguagesChange = (languages: string[]) => {
@@ -126,7 +147,6 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   }
 
   const activeTab = navToTab(activeNav)
-  const communityView = navCommunityView(activeNav)
 
   const tabFallback = (
     <div className="flex h-full items-center justify-center py-16">
@@ -135,6 +155,7 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
   )
 
   return (
+    <MobileWebAppInterstitial>
     <div className="dark h-screen">
       <WebAppShell
         activeNav={activeNav}
@@ -143,14 +164,20 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
         profilePicture={profilePicture}
         streakRefreshKey={refreshKey}
       >
-        {activeTab === 'discover' && (
-          <Suspense fallback={tabFallback}>
-            <DiscoverTab
-              selectedLanguages={selectedLanguages}
-              webShell
-              onStreakActivity={refreshStreak}
-            />
-          </Suspense>
+        <div className="shrink-0">
+          <ContextualHint hintId="discover" active={activeNav === 'stories' || activeNav === 'messages'} />
+          <ContextualHint hintId="share" active={activeTab === 'share'} />
+          <ContextualHint hintId="checkin" active={activeTab === 'checkin'} />
+          <ContextualHint hintId="community" active={activeNav === 'home'} />
+        </div>
+        {/* Stories (+ Messages) = full Community MVP */}
+        {(activeNav === 'stories' || activeNav === 'messages') && (
+          <CommunityTab
+            selectedLanguages={selectedLanguages}
+            initialViewMode="all"
+            webShell
+            onStreakActivity={refreshStreak}
+          />
         )}
         {activeTab === 'share' && (
           <Suspense fallback={tabFallback}>
@@ -164,12 +191,21 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
             onNavigateToProfile={() => setActiveNav('profile')}
           />
         )}
-        {activeTab === 'community' && (
+        {activeNav === 'saved' && (
           <CommunityTab
             selectedLanguages={selectedLanguages}
-            initialViewMode={communityView}
+            initialViewMode="saved"
             webShell
             onStreakActivity={refreshStreak}
+          />
+        )}
+        {activeNav === 'home' && (
+          <HomeTab
+            selectedLanguages={selectedLanguages}
+            webShell
+            onNavigateToWrite={() => setActiveNav('write')}
+            onNavigateToCheckIn={() => setActiveNav('activity')}
+            onNavigateToStories={() => setActiveNav('stories')}
           />
         )}
         {activeTab === 'profile' && (
@@ -184,5 +220,6 @@ export function AuthenticatedWebApp({ user }: AuthenticatedWebAppProps) {
       </WebAppShell>
       <Toaster theme={theme} />
     </div>
+    </MobileWebAppInterstitial>
   )
 }

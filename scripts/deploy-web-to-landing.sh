@@ -9,8 +9,10 @@ LANDING="${LANDING_DIR:-/Users/sharanestone/Semprog/betweenus_landing}"
 cd "$APP"
 npm run build
 
-# Preserve website ownership / association files
-KEEP=(CNAME .nojekyll apple-app-site-association assetlinks.json robots.txt sitemap.xml .well-known)
+# Preserve website ownership / association files (not content/SEO artifacts from app build)
+# Also preserve landing-repo tooling that must survive the wipe.
+KEEP=(CNAME .nojekyll apple-app-site-association assetlinks.json .well-known .github .gitignore package.json package-lock.json scripts)
+
 
 tmpdir="$(mktemp -d)"
 for f in "${KEEP[@]}"; do

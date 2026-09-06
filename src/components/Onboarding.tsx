@@ -1,13 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { AnimatedLogo } from './AnimatedLogo';
-import { AuthStep } from './AuthStep';
-import { OnboardingProgress } from './OnboardingProgress';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Heart, Shield, Globe, Sparkles, ArrowRight, Check, Award, Hand } from 'lucide-react';
-import { useLanguage, LANGUAGES } from './LanguageContext';
-import logoImage from '../assets/betweenus-logo.png';
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { AuthStep } from './AuthStep'
+import { OnboardingProgress } from './OnboardingProgress'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { ArrowRight, Check, Hand } from 'lucide-react'
+import { useLanguage, LANGUAGES } from './LanguageContext'
+import logoImage from '../assets/betweenus-logo.png'
 
 // Cycling language question texts (like Mac setup)
 const LANGUAGE_QUESTIONS = [
@@ -17,110 +16,67 @@ const LANGUAGE_QUESTIONS = [
   { lang: 'hi', text: 'अपनी भाषा चुनें' },
   { lang: 'de', text: 'Wählen Sie Ihre Sprache' },
   { lang: 'fr', text: 'Choisissez votre langue' },
-];
+]
 
-const getOnboardingSteps = (t: (key: string) => string, userName?: string) => [
-  {
-    title: t('onboarding.welcome.title'),
-    subtitle: t('onboarding.welcome.subtitle'),
-    icon: Heart,
-    gradient: 'from-pink-500 via-fuchsia-500 to-purple-600',
-    description: t('onboarding.welcome.description'),
-    greeting: userName ? `${t('checkin.welcome')} ${userName}!` : t('onboarding.welcome.title'),
-  },
-  {
-    title: t('onboarding.anonymity.title'),
-    subtitle: t('onboarding.anonymity.subtitle'),
-    icon: Shield,
-    gradient: 'from-cyan-500 via-blue-500 to-purple-600',
-    description: t('onboarding.anonymity.description'),
-  },
-  {
-    title: t('onboarding.track.title'),
-    subtitle: t('onboarding.track.subtitle'),
-    icon: Sparkles,
-    gradient: 'from-orange-500 via-pink-500 to-fuchsia-600',
-    description: t('onboarding.track.description'),
-  },
-  {
-    title: t('onboarding.community.title'),
-    subtitle: t('onboarding.community.subtitle'),
-    icon: Globe,
-    gradient: 'from-green-500 via-teal-500 to-cyan-600',
-    description: t('onboarding.community.description'),
-  },
-  {
-    title: t('onboarding.levels.title'),
-    subtitle: t('onboarding.levels.subtitle'),
-    icon: Award,
-    gradient: 'from-yellow-500 via-amber-500 to-orange-600',
-    description: t('onboarding.levels.description'),
-  },
-];
-
+/**
+ * Native first-run setup: language → optional name → auth.
+ * Feature education moved to the short Welcome screen + in-app contextual hints.
+ */
 export function Onboarding({ onComplete }: { onComplete: (languages: string[], name?: string) => void }) {
-  const { t, setLanguage } = useLanguage();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
-  const [cyclingTextIndex, setCyclingTextIndex] = useState(0);
+  const { t, setLanguage } = useLanguage()
+  const [currentStep, setCurrentStep] = useState(0)
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('')
+  const [userName, setUserName] = useState<string>('')
+  const [cyclingTextIndex, setCyclingTextIndex] = useState(0)
 
-  // Generate static random values for background orbs to prevent re-renders
-  const backgroundOrbs = useMemo(() => 
-    [...Array(5)].map((_, i) => ({
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      x: Math.random() * 100 - 50,
-      y: Math.random() * 100 - 50,
-      isEven: i % 2 === 0,
-    })), []
-  );
+  const backgroundOrbs = useMemo(
+    () =>
+      [...Array(5)].map((_, i) => ({
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+        x: Math.random() * 100 - 50,
+        y: Math.random() * 100 - 50,
+        isEven: i % 2 === 0,
+      })),
+    []
+  )
 
-  // Animated cycling text effect (like Mac setup)
   useEffect(() => {
-    if (currentStep === 0) {
-      const interval = setInterval(() => {
-        setCyclingTextIndex((prev) => (prev + 1) % LANGUAGE_QUESTIONS.length);
-      }, 2000); // Change every 2 seconds
-      return () => clearInterval(interval);
-    }
-  }, [currentStep]);
+    if (currentStep !== 0) return
+    const interval = setInterval(() => {
+      setCyclingTextIndex((prev) => (prev + 1) % LANGUAGE_QUESTIONS.length)
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [currentStep])
 
-  // Total steps: Language (0) → Name (1) → Info Steps (2-6) → Auth (7)
-  const totalSteps = 8;
-  const isLanguageStep = currentStep === 0;
-  const isNameStep = currentStep === 1;
-  const isAuthStep = currentStep === 7;
-  const isInfoStep = currentStep >= 2 && currentStep <= 6;
-  const infoStepIndex = currentStep - 2;
-
-  const ONBOARDING_STEPS = useMemo(() => getOnboardingSteps(t, userName), [t, userName]);
-  const isLastInfoStep = currentStep === 6;
+  // Language (0) → Name (1) → Auth (2)
+  const totalSteps = 3
+  const isLanguageStep = currentStep === 0
+  const isNameStep = currentStep === 1
+  const isAuthStep = currentStep === 2
 
   const handleLanguageSelect = (code: string) => {
-    setSelectedLanguage(code);
-    setLanguage(code as any);
-  };
+    setSelectedLanguage(code)
+    setLanguage(code as 'en')
+  }
 
   const handleNext = () => {
-    if (currentStep === 0 && !selectedLanguage) {
-      return; // Don't proceed without language
-    }
+    if (currentStep === 0 && !selectedLanguage) return
     if (currentStep < totalSteps - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      onComplete([selectedLanguage], userName || undefined);
+      setCurrentStep(currentStep + 1)
+      return
     }
-  };
+    onComplete([selectedLanguage], userName || undefined)
+  }
 
   const handleAuthComplete = (skipAuth?: boolean) => {
     if (skipAuth) {
-      console.log('User skipped authentication');
+      console.log('User skipped authentication')
     } else {
-      console.log('User completed authentication');
+      console.log('User completed authentication')
     }
-    onComplete([selectedLanguage], userName || undefined);
-  };
+    onComplete([selectedLanguage], userName || undefined)
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 pt-24 relative overflow-hidden bg-[#0f0f1e]">
@@ -129,8 +85,7 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
         totalSteps={totalSteps}
         label={t('onboarding.progress') || 'Getting started'}
       />
-      {/* Animated background orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
         {backgroundOrbs.map((orb, i) => (
           <motion.div
             key={i}
@@ -156,7 +111,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
       </div>
 
       <AnimatePresence mode="wait">
-        {/* Step 1: Language Selection with Cycling Text */}
         {isLanguageStep && (
           <motion.div
             key="language-step"
@@ -166,21 +120,15 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
             transition={{ duration: 0.5 }}
             className="max-w-lg w-full text-center relative z-10"
           >
-            {/* Logo */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
               className="flex justify-center mb-8"
             >
-              <img 
-                src={logoImage} 
-                alt="Between Us" 
-                className="h-12 w-auto"
-              />
+              <img src={logoImage} alt="Between Us" className="h-12 w-auto" />
             </motion.div>
 
-            {/* Cycling Question Text */}
             <div className="mb-12 h-16 flex items-center justify-center">
               <AnimatePresence mode="wait">
                 <motion.h1
@@ -196,7 +144,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
               </AnimatePresence>
             </div>
 
-            {/* Language Grid */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -236,7 +183,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
               ))}
             </motion.div>
 
-            {/* Continue Button */}
             <Button
               onClick={handleNext}
               disabled={!selectedLanguage}
@@ -252,7 +198,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
           </motion.div>
         )}
 
-        {/* Step 2: Name Input */}
         {isNameStep && (
           <motion.div
             key="name-step"
@@ -262,18 +207,13 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
             transition={{ duration: 0.5 }}
             className="max-w-lg w-full text-center relative z-10"
           >
-            {/* Logo */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
               className="flex justify-center mb-8"
             >
-              <img 
-                src={logoImage} 
-                alt="Between Us" 
-                className="h-12 w-auto"
-              />
+              <img src={logoImage} alt="Between Us" className="h-12 w-auto" />
             </motion.div>
 
             <motion.div
@@ -283,14 +223,8 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
               className="bg-gradient-to-br from-purple-500 via-fuchsia-500 to-pink-500 p-1 rounded-3xl mb-6"
             >
               <div className="bg-[#0f0f1e] rounded-3xl p-8 backdrop-blur-sm">
-                <h1 className="text-white mb-2">
-                  {t('onboarding.name.title')}
-                </h1>
-                
-                <p className="text-gray-400 mb-6">
-                  {t('onboarding.name.subtitle')}
-                </p>
-
+                <h1 className="text-white mb-2">{t('onboarding.name.title')}</h1>
+                <p className="text-gray-400 mb-6">{t('onboarding.name.subtitle')}</p>
                 <Input
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
@@ -301,7 +235,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
               </div>
             </motion.div>
 
-            {/* Animated icon */}
             <motion.div
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
@@ -321,7 +254,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
               >
                 {t('checkin.back')}
               </Button>
-              
               <Button
                 onClick={handleNext}
                 className="bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 hover:opacity-90 text-white px-8 py-6 rounded-xl shadow-lg"
@@ -333,119 +265,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
           </motion.div>
         )}
 
-        {/* Steps 3-6: Info Steps */}
-        {isInfoStep && (
-          <motion.div
-            key={`info-step-${infoStepIndex}`}
-            initial={{ opacity: 0, scale: 0.9, rotateY: 10 }}
-            animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-            exit={{ opacity: 0, scale: 0.9, rotateY: -10 }}
-            transition={{ duration: 0.5, type: 'spring' }}
-            className="max-w-lg w-full text-center relative z-10"
-          >
-            {/* Step indicator */}
-            <div className="flex justify-center gap-2 mb-8">
-              {ONBOARDING_STEPS.map((_, index) => (
-                <motion.div
-                  key={index}
-                  className={`h-1.5 rounded-full transition-all ${
-                    index === infoStepIndex
-                      ? 'w-8 bg-gradient-to-r from-purple-500 to-fuchsia-500'
-                      : index < infoStepIndex
-                      ? 'w-1.5 bg-purple-500/50'
-                      : 'w-1.5 bg-gray-600'
-                  }`}
-                  layoutId={index === infoStepIndex ? 'activeStep' : undefined}
-                />
-              ))}
-            </div>
-
-            {/* Logo Banner */}
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="flex justify-center mb-8"
-            >
-              <img 
-                src={logoImage} 
-                alt="Between Us" 
-                className="h-12 w-auto"
-              />
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className={`bg-gradient-to-br ${ONBOARDING_STEPS[infoStepIndex].gradient} p-1 rounded-3xl mb-6`}
-            >
-              <div className="bg-[#0f0f1e] rounded-3xl p-8 backdrop-blur-sm">
-                {infoStepIndex === 0 && userName ? (
-                  <h1 className="text-white mb-2">
-                    {ONBOARDING_STEPS[infoStepIndex].greeting}
-                  </h1>
-                ) : (
-                  <h1 className="text-white mb-2">
-                    {ONBOARDING_STEPS[infoStepIndex].title}
-                  </h1>
-                )}
-                
-                <p className="text-gray-400 mb-6">
-                  {ONBOARDING_STEPS[infoStepIndex].subtitle}
-                </p>
-
-                <p className="text-gray-300 leading-relaxed">
-                  {ONBOARDING_STEPS[infoStepIndex].description}
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Animated icon */}
-            <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-              className="flex justify-center mb-8"
-            >
-              <div className={`w-24 h-24 rounded-full bg-gradient-to-br ${ONBOARDING_STEPS[infoStepIndex].gradient} flex items-center justify-center`}>
-                {(() => {
-                  const StepIcon = ONBOARDING_STEPS[infoStepIndex].icon;
-                  return <StepIcon className="w-12 h-12 text-white" />;
-                })()}
-              </div>
-            </motion.div>
-
-            <div className="flex gap-4 justify-center">
-              <Button
-                onClick={() => setCurrentStep(currentStep - 1)}
-                variant="ghost"
-                className="text-gray-400 hover:text-white"
-              >
-                {t('checkin.back')}
-              </Button>
-              
-              <Button
-                onClick={handleNext}
-                className={`bg-gradient-to-r ${ONBOARDING_STEPS[infoStepIndex].gradient} hover:opacity-90 text-white px-8 py-6 rounded-xl shadow-lg`}
-              >
-                {isLastInfoStep ? (
-                  <>
-                    {t('onboarding.button.getStarted')}
-                    <Sparkles className="ml-2 w-5 h-5" />
-                  </>
-                ) : (
-                  <>
-                    {t('onboarding.button.next')}
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Step 7: Authentication */}
         {isAuthStep && (
           <AuthStep
             userName={userName}
@@ -455,16 +274,6 @@ export function Onboarding({ onComplete }: { onComplete: (languages: string[], n
           />
         )}
       </AnimatePresence>
-
-      <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
-        }
-        .float-animation {
-          animation: float 3s ease-in-out infinite;
-        }
-      `}</style>
     </div>
-  );
+  )
 }

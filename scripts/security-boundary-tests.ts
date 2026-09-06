@@ -139,6 +139,91 @@ async function main() {
     assert('admin reports blocked', status === 401 || status === 403, `status=${status}`)
   }
 
+  // 10b. Editorial Journal CMS (landing-cms) — anonymous blocked
+  // Skip with clear message if Edge Function not yet redeployed with these routes.
+  {
+    const me = await request('/landing-cms/me')
+    if (me.status === 404) {
+      console.log('SKIP CMS authz matrix — deploy Edge Function with landing-cms routes first')
+    } else {
+      assert('CMS me requires auth', me.status === 401 || me.status === 403, `status=${me.status}`)
+
+      const list = await request('/landing-cms/journal-articles')
+      assert('CMS list requires auth', list.status === 401 || list.status === 403, `status=${list.status}`)
+
+      const create = await request('/landing-cms/journal-articles', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'hack',
+          slug: 'hack',
+          excerpt: 'x',
+          body: '<p>x</p>',
+          category: 'Relationships',
+          author: 'x',
+        }),
+      })
+      assert('CMS create requires auth', create.status === 401 || create.status === 403, `status=${create.status}`)
+
+      const patch = await request('/landing-cms/journal-articles/00000000-0000-4000-8000-000000000001', {
+        method: 'PATCH',
+        body: JSON.stringify({ title: 'hack' }),
+      })
+      assert('CMS patch requires auth', patch.status === 401 || patch.status === 403, `status=${patch.status}`)
+
+      const publish = await request('/landing-cms/journal-articles/00000000-0000-4000-8000-000000000001/publish', {
+        method: 'POST',
+        body: '{}',
+      })
+      assert('CMS publish requires auth', publish.status === 401 || publish.status === 403, `status=${publish.status}`)
+
+      const pushLive = await request('/landing-cms/journal/push-live', {
+        method: 'POST',
+        body: '{}',
+      })
+      assert('CMS push-live requires auth', pushLive.status === 401 || pushLive.status === 403, `status=${pushLive.status}`)
+
+      const upload = await request('/landing-cms/journal-images/signed-upload', {
+        method: 'POST',
+        body: JSON.stringify({ filename: 'x.jpg', contentType: 'image/jpeg', byteSize: 100 }),
+      })
+      assert('CMS image upload requires auth', upload.status === 401 || upload.status === 403, `status=${upload.status}`)
+    }
+  }
+
+  // 10c. Bundle must not embed service-role / GitHub dispatch secrets (static check)
+  {
+    const fs = await import('fs')
+    const path = await import('path')
+    const distDir = path.join(process.cwd(), 'dist')
+    let leaked = false
+    let detail = 'dist not built yet — skipped'
+    if (fs.existsSync(distDir)) {
+      const walk = (dir: string): string[] => {
+        const out: string[] = []
+        for (const name of fs.readdirSync(dir)) {
+          const full = path.join(dir, name)
+          if (fs.statSync(full).isDirectory()) out.push(...walk(full))
+          else if (/\.(js|html|css|json|map)$/.test(name)) out.push(full)
+        }
+        return out
+      }
+      for (const file of walk(distDir)) {
+        const text = fs.readFileSync(file, 'utf8')
+        if (
+          text.includes('SERVICE_ROLE_KEY') ||
+          text.includes('GITHUB_LANDING_DISPATCH') ||
+          /supabase.*service_role/i.test(text)
+        ) {
+          leaked = true
+          detail = `leak in ${path.relative(process.cwd(), file)}`
+          break
+        }
+      }
+      if (!leaked) detail = 'no service-role/github dispatch strings in dist'
+    }
+    assert('client bundle has no service-role/github secrets', !leaked, detail)
+  }
+
   // 11. Production-style upgrade blocked without payment (expects auth first)
   {
     const { status } = await request('/subscription/upgrade', {
@@ -152,6 +237,60 @@ async function main() {
   {
     const { status } = await request('/auth/delete-account', { method: 'POST', body: '{}' })
     assert('delete-account requires auth', status === 401, `status=${status}`)
+  }
+
+  // 12b. Ephemeral signup → delete-account → cannot reuse session (complete deletion path)
+  {
+    const stamp = Date.now()
+    const email = `delete-probe-${stamp}@betweenus-security.test`
+    const password = `DelProbe_${stamp}_Aa1!`
+    const signup = await request('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name: 'Delete Probe' }),
+    })
+    const token = signup.json?.access_token
+    const userId = signup.json?.user?.id
+    if (signup.status !== 200 || !token || !userId) {
+      assert(
+        'delete-account ephemeral signup',
+        false,
+        `signup status=${signup.status} error=${signup.json?.error || ''}`,
+      )
+    } else {
+      // Seed a private journal entry so deletion must clear non-post data
+      await request('/journal', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: 'delete probe journal', mood: 'okay' }),
+      })
+      const del = await request('/auth/delete-account', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: '{}',
+      })
+      assert('delete-account succeeds for owner', del.status === 200 && del.json?.success === true, `status=${del.status}`)
+
+      const after = await request('/auth/user', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      assert(
+        'deleted session cannot load user',
+        after.status === 401 || after.status === 403,
+        `status=${after.status}`,
+      )
+
+      // Repeat deletion with same token must fail (user already gone)
+      const delAgain = await request('/auth/delete-account', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: '{}',
+      })
+      assert(
+        'repeated delete-account rejected',
+        delAgain.status === 401 || delAgain.status === 403 || delAgain.status === 500,
+        `status=${delAgain.status}`,
+      )
+    }
   }
 
   // 13. Anonymous post cannot claim arbitrary UUID authorship
@@ -240,6 +379,41 @@ async function main() {
         upgrade.status === 403 && upgrade.json?.code === 'PAYMENT_REQUIRED',
         `status=${upgrade.status} code=${upgrade.json?.code}`,
       )
+
+      // Normal authenticated users must not access Journal CMS
+      const cmsMe = await request('/landing-cms/me', {
+        headers: { Authorization: `Bearer ${tokenA}` },
+      })
+      if (cmsMe.status === 404) {
+        console.log('SKIP CMS normal-user forbid — Edge not redeployed yet')
+      } else {
+        assert('normal user CMS me forbidden', cmsMe.status === 403, `status=${cmsMe.status}`)
+        const cmsCreate = await request('/landing-cms/journal-articles', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenA}` },
+          body: JSON.stringify({
+            title: 'should fail',
+            slug: 'should-fail',
+            excerpt: 'x',
+            body: '<p>x</p>',
+            category: 'Relationships',
+            author: 'x',
+          }),
+        })
+        assert('normal user CMS create forbidden', cmsCreate.status === 403, `status=${cmsCreate.status}`)
+        const cmsPublish = await request('/landing-cms/journal-articles/00000000-0000-4000-8000-000000000001/publish', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenA}` },
+          body: '{}',
+        })
+        assert('normal user CMS publish forbidden', cmsPublish.status === 403, `status=${cmsPublish.status}`)
+        const cmsPush = await request('/landing-cms/journal/push-live', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenA}` },
+          body: '{}',
+        })
+        assert('normal user CMS push-live forbidden', cmsPush.status === 403, `status=${cmsPush.status}`)
+      }
     } else {
       assert('authenticated pair login', false, 'could not sign in both security test users')
     }

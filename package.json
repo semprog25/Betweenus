@@ -44,7 +44,7 @@
     "@radix-ui/react-toggle": "^1.1.2",
     "@radix-ui/react-toggle-group": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
-    "@revenuecat/purchases-capacitor": "*",
+    "@revenuecat/purchases-capacitor": "13.4.1",
     "@supabase/supabase-js": "^2.39.3",
     "canvas-confetti": "*",
     "class-variance-authority": "^0.7.1",
@@ -88,6 +88,9 @@
     "cap:add:ios": "npx cap add ios",
     "cap:add:android": "npx cap add android",
     "test:security": "npx tsx scripts/security-boundary-tests.ts",
+    "test:journal-ads": "node scripts/test-journal-ad-placement.cjs",
+    "generate:journal": "node scripts/generateJournal.js",
+    "generate:marketing": "node scripts/generate-public-marketing.cjs",
     "icons:generate": "python3 scripts/generate-brand-icons.py"
   }
 }

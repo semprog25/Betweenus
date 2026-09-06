@@ -9,7 +9,7 @@ export function OnboardingProgress({ currentStep, totalSteps, label }: Onboardin
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-20 px-6 pt-[max(var(--safe-area-inset-top),12px)] pb-3 bg-[#0f0f1e]/80 backdrop-blur-md"
+      className="fixed top-0 left-0 right-0 z-20 px-6 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 bg-[#0f0f1e]/80 backdrop-blur-md"
       role="progressbar"
       aria-valuenow={progress}
       aria-valuemin={0}

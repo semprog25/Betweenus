@@ -1,13 +1,15 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Moon, Sun, CheckCircle, MessageSquarePlus, Compass, Globe, User, Loader2 } from 'lucide-react';
+import { Moon, Sun, CheckCircle, MessageSquarePlus, Compass, Home, User, Loader2 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
 import { Onboarding } from './components/Onboarding';
 import { Tutorial } from './components/Tutorial';
+import { ContextualHint } from './components/ContextualHint';
 import { CheckInTab } from './components/CheckInTab';
-import { ProfileTab } from './components/ProfileTab';
 import { CommunityTab } from './components/CommunityTab';
+import { ProfileTab } from './components/ProfileTab';
+import { HomeTab } from './components/HomeTab';
 import { BottomNavBar } from './components/BottomNavBar';
 import { AchievementToast } from './components/AchievementToast';
 import { ThemeProvider, useTheme } from './components/ThemeProvider';
@@ -17,6 +19,15 @@ import { getSession, getUserProfile, type PendingAuthAction } from './utils/auth
 import { syncUserTimezone } from './utils/timezone-sync';
 import { registerDeepLinkHandlers, consumeOpenStoryId } from './utils/deep-links';
 import { useAchievementNotifications } from './hooks/useAchievementNotifications';
+import {
+  clearOnboardingLocalState,
+  isOnboardingCompleted,
+  isTutorialCompleted,
+  markOnboardingCompleted,
+  markTutorialCompleted,
+  ONBOARDING_STORAGE_KEEP_KEYS,
+  seedOnboardingMigration,
+} from './utils/onboarding-state';
 import { toast } from 'sonner@2.0.3';
 import logoImage from './assets/betweenus-logo.png';
 import { isWeb } from './utils/platform';
@@ -25,7 +36,6 @@ import { PublicWebsite } from './web/public-website';
 import { AuthenticatedWebApp } from './web/authenticated-web-app';
 
 const ShareTab = lazy(() => import('./components/ShareTab').then((m) => ({ default: m.ShareTab })));
-const DiscoverTab = lazy(() => import('./components/DiscoverTab').then((m) => ({ default: m.DiscoverTab })));
 
 type Tab = 'discover' | 'share' | 'checkin' | 'community' | 'profile';
 
@@ -35,6 +45,7 @@ function AuthLoadingScreen() {
       <div className="flex flex-col items-center gap-3">
         <img src={logoImage} alt="Between Us" className="h-8 w-auto object-contain" />
         <Loader2 className="h-6 w-6 animate-spin text-fuchsia-400" aria-label="Loading" />
+        <p className="sr-only">Loading Between Us</p>
       </div>
     </div>
   )
@@ -57,23 +68,16 @@ function AppContent() {
 
 function NativeAppContent() {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
-    // TEMPORARY: Force onboarding to show for testing - remove this later
-    // return false;
-    
-    if (typeof window !== 'undefined') {
-      const completed = localStorage.getItem('hasCompletedOnboarding') === 'true';
-      console.log('Onboarding completed:', completed);
-      return completed;
-    }
-    return false;
+    seedOnboardingMigration()
+    const completed = isOnboardingCompleted()
+    console.log('Onboarding completed:', completed)
+    return completed
   });
   const [hasCompletedTutorial, setHasCompletedTutorial] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const completed = localStorage.getItem('hasCompletedTutorial') === 'true';
-      console.log('Tutorial completed:', completed);
-      return completed;
-    }
-    return false;
+    seedOnboardingMigration()
+    const completed = isTutorialCompleted()
+    console.log('Tutorial completed:', completed)
+    return completed
   });
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -91,7 +95,7 @@ function NativeAppContent() {
     }
     return ['en'];
   });
-  const [activeTab, setActiveTab] = useState<Tab>('discover');
+  const [activeTab, setActiveTab] = useState<Tab>('community');
   const [userName, setUserName] = useState<string>('Friend');
   const [profilePicture, setProfilePicture] = useState<string>('');
   const [showResetButton, setShowResetButton] = useState<boolean>(false);
@@ -121,10 +125,9 @@ function NativeAppContent() {
           const keysToKeep = [
             'between_us_session',
             'between_us_user',
-            'hasCompletedOnboarding',
-            'hasCompletedTutorial',
             'between_us_language',
-            'between_us_selected_languages'
+            'between_us_selected_languages',
+            ...ONBOARDING_STORAGE_KEEP_KEYS,
           ];
           
           const allKeys = Object.keys(localStorage);
@@ -211,9 +214,7 @@ function NativeAppContent() {
     const applyAuthenticatedState = (pending: PendingAuthAction | null) => {
       toast.success(t('auth.signedInSuccess'))
       setHasCompletedOnboarding(true)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('hasCompletedOnboarding', 'true')
-      }
+      markOnboardingCompleted()
       const session = getSession()
       const metadata = session?.user?.user_metadata
       if (metadata?.name) setUserName(metadata.name)
@@ -258,10 +259,9 @@ function NativeAppContent() {
   // Reset button for development only
   const resetOnboarding = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('hasCompletedOnboarding');
-      localStorage.removeItem('hasCompletedTutorial');
-      localStorage.removeItem('between_us_selected_languages');
-      window.location.reload();
+      clearOnboardingLocalState()
+      localStorage.removeItem('between_us_selected_languages')
+      window.location.reload()
     }
   };
 
@@ -276,16 +276,12 @@ function NativeAppContent() {
       setLanguage(languages[0] as any);
     }
     setHasCompletedOnboarding(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hasCompletedOnboarding', 'true');
-    }
+    markOnboardingCompleted()
   };
 
   const handleTutorialComplete = () => {
     setHasCompletedTutorial(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hasCompletedTutorial', 'true');
-    }
+    markTutorialCompleted({ enableContextualHints: true })
   };
 
   const handleLanguagesChange = (languages: string[]) => {
@@ -316,9 +312,9 @@ function NativeAppContent() {
   console.log('Showing main app...');
 
   const tabs = [
+    { id: 'community' as Tab, icon: Home, label: t('nav.community') },
     { id: 'discover' as Tab, icon: Compass, label: t('nav.discover') },
     { id: 'share' as Tab, icon: MessageSquarePlus, label: t('nav.share') },
-    { id: 'community' as Tab, icon: Globe, label: t('nav.community') },
     { id: 'checkin' as Tab, icon: CheckCircle, label: t('nav.checkin') },
     { id: 'profile' as Tab, icon: User, label: t('nav.profile') },
   ];
@@ -397,20 +393,25 @@ function NativeAppContent() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 overflow-hidden">
+      <main className="relative z-10 flex-1 overflow-hidden flex flex-col">
+        <div className="shrink-0 pt-2">
+          <ContextualHint hintId="discover" active={activeTab === 'discover'} />
+          <ContextualHint hintId="share" active={activeTab === 'share'} />
+          <ContextualHint hintId="checkin" active={activeTab === 'checkin'} />
+          <ContextualHint hintId="community" active={activeTab === 'community'} />
+        </div>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="h-full"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="h-full flex-1 min-h-0"
           >
+            {/* Stories tab = full Community MVP (All Posts | Saved, filters, stats, feed) */}
             {activeTab === 'discover' && (
-              <Suspense fallback={tabFallback}>
-                <DiscoverTab selectedLanguages={selectedLanguages} />
-              </Suspense>
+              <CommunityTab selectedLanguages={selectedLanguages} />
             )}
             {activeTab === 'share' && (
               <Suspense fallback={tabFallback}>
@@ -418,7 +419,15 @@ function NativeAppContent() {
               </Suspense>
             )}
             {activeTab === 'checkin' && <CheckInTab userName={userName} profilePicture={profilePicture} onNavigateToProfile={() => setActiveTab('profile')} />}
-            {activeTab === 'community' && <CommunityTab selectedLanguages={selectedLanguages} />}
+            {/* Home tab = overview (Write / Check-in / discovery preview / Journey) */}
+            {activeTab === 'community' && (
+              <HomeTab
+                selectedLanguages={selectedLanguages}
+                onNavigateToWrite={() => setActiveTab('share')}
+                onNavigateToCheckIn={() => setActiveTab('checkin')}
+                onNavigateToStories={() => setActiveTab('discover')}
+              />
+            )}
             {activeTab === 'profile' && (
               <ProfileTab 
                 selectedLanguages={selectedLanguages} 

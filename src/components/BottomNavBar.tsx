@@ -56,9 +56,7 @@ export function BottomNavBar({ tabs, activeTab, setActiveTab }: BottomNavBarProp
                 {/* Icon */}
                 <div className="relative z-10">
                   <Icon 
-                    className={`w-5 h-5 transition-transform duration-200 ${
-                      isActive ? 'scale-110' : ''
-                    }`}
+                    className="w-5 h-5"
                     strokeWidth={isActive ? 2.5 : 2}
                   />
                 </div>

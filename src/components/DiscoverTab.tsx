@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'motion/react'
 import {
   ThumbsUp,
   ThumbsDown,
   MessageCircle,
-  Flame,
-  TrendingUp,
-  Sparkles,
-  Shuffle,
   Loader2,
   User,
   Edit2,
@@ -314,75 +309,60 @@ export function DiscoverTab({ selectedLanguages, webShell = false, onStreakActiv
     }
   }
 
-  const filters: { id: DiscoverFilter; icon: typeof Flame; label: string }[] = webShell
-    ? [
-        { id: 'trending', icon: TrendingUp, label: 'Trending' },
-        { id: 'newest', icon: Sparkles, label: 'Newest' },
-        { id: 'controversial', icon: Flame, label: 'Most Discussed' },
-      ]
-    : [
-        { id: 'trending', icon: TrendingUp, label: t('discover.filter.trending') },
-        { id: 'newest', icon: Sparkles, label: t('discover.filter.newest') },
-        { id: 'controversial', icon: Flame, label: t('discover.filter.hot') },
-        { id: 'random', icon: Shuffle, label: t('discover.filter.random') },
-      ]
+  const filters: { id: DiscoverFilter; label: string }[] = [
+    { id: 'trending', label: t('discover.filter.trending') },
+    { id: 'newest', label: t('discover.filter.newest') },
+    { id: 'controversial', label: t('discover.filter.discussed') },
+  ]
 
   return (
     <div className={`h-full overflow-y-auto scrollbar-hide ${webShell ? 'bu-web-tab-content pb-8' : 'pb-24'}`}>
-      <div className={`mx-auto space-y-4 ${webShell ? 'max-w-none px-0 py-0' : 'max-w-3xl px-4 py-4'}`}>
-        {!webShell && (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Compass className="w-5 h-5 text-purple-600 dark:text-purple-400" strokeWidth={2} />
-            <div>
-              <h1 className="text-lg font-bold text-foreground">{t('discover.title')}</h1>
-              <p className="text-xs text-muted-foreground">{t('discover.subtitle')}</p>
+      <div className={`mx-auto space-y-3 ${webShell ? 'max-w-none px-0 py-0' : 'max-w-3xl px-4 py-4'}`}>
+        <div className="flex items-start justify-between gap-3">
+          {!webShell ? (
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-foreground">{t('discover.title')}</h1>
+              <p className="text-sm text-muted-foreground">{t('discover.subtitle')}</p>
             </div>
-          </div>
+          ) : (
+            <div className="min-w-0 flex-1" />
+          )}
           <Button
             variant="ghost"
             size="icon"
             onClick={() => fetchDiscoverPosts(currentFilter)}
             disabled={isLoading}
             aria-label={t('discover.refresh')}
-            className="shrink-0"
+            className={`shrink-0 h-10 w-10 ${webShell ? 'text-zinc-400 hover:text-white' : ''}`}
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        )}
 
-        {webShell && (
-          <div className="flex items-center justify-end">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => fetchDiscoverPosts(currentFilter)}
-              disabled={isLoading}
-              aria-label={t('discover.refresh')}
-              className="shrink-0 text-zinc-400 hover:text-white"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        )}
-
-        <div className={`flex gap-2 overflow-x-auto pb-1 scrollbar-hide ${webShell ? 'bu-web-feed-filters' : ''}`}>
-          {filters.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => handleFilterChange(id)}
-              className={`px-3 py-2 rounded-xl flex items-center gap-1.5 whitespace-nowrap text-sm font-medium transition-all min-h-[44px] ${
-                currentFilter === id
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-muted text-muted-foreground hover:bg-accent'
-              }`}
-            >
-              <Icon className="w-4 h-4" strokeWidth={2} />
-              {label}
-            </button>
-          ))}
+        <div
+          role="tablist"
+          aria-label={t('discover.filtersLabel')}
+          className={`grid grid-cols-3 gap-1 rounded-xl border border-border bg-muted/60 p-1 ${webShell ? 'bu-web-feed-filters' : ''}`}
+        >
+          {filters.map(({ id, label }) => {
+            const isSelected = currentFilter === id
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => handleFilterChange(id)}
+                className={`min-h-[40px] rounded-lg px-2 py-2 text-center text-xs font-semibold sm:text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 ${
+                  isSelected
+                    ? 'bg-purple-600 text-white border border-purple-500'
+                    : 'bg-transparent text-muted-foreground border border-transparent hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         {isLoading && posts.length === 0 ? (
@@ -398,72 +378,65 @@ export function DiscoverTab({ selectedLanguages, webShell = false, onStreakActiv
             <Button onClick={() => fetchDiscoverPosts(currentFilter)}>{t('discover.tryAgain')}</Button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {posts.map((post, index) => {
               const isExpanded = expandedPostId === post.id
               const score = (post.upvotes || 0) - (post.downvotes || 0)
 
               return (
-                <div key={post.id} className="space-y-4">
+                <div key={post.id} className="space-y-3">
                   {shouldInsertFeedAd(index, adFree) ? <FeedAdCard /> : null}
-                <motion.article
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.03, 0.3) }}
-                  className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden"
+                <article
+                  className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
                 >
-                  <div className="p-4 sm:p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="flex flex-col items-center gap-1 shrink-0 pt-1">
+                  <div className="p-3 sm:p-4">
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex flex-col items-center gap-0.5 shrink-0 pt-0.5">
                         <button
                           type="button"
                           onClick={() => handlePostVote(post.id, 'up')}
                           aria-label={t('discover.upvote')}
-                          className={`p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
+                          className={`rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center ${
                             post.upvotedBy?.includes(userId)
                               ? 'text-green-600 bg-green-50 dark:bg-green-950/30'
                               : 'text-muted-foreground hover:text-green-600 hover:bg-muted'
                           }`}
                         >
-                          <ThumbsUp className={`w-5 h-5 ${post.upvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                          <ThumbsUp className={`w-4 h-4 ${post.upvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
                         </button>
-                        <span className="text-sm font-semibold tabular-nums text-foreground">{score}</span>
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground">{score}</span>
                         <button
                           type="button"
                           onClick={() => handlePostVote(post.id, 'down')}
                           aria-label={t('discover.downvote')}
-                          className={`p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${
+                          className={`rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center ${
                             post.downvotedBy?.includes(userId)
                               ? 'text-red-600 bg-red-50 dark:bg-red-950/30'
                               : 'text-muted-foreground hover:text-red-600 hover:bg-muted'
                           }`}
                         >
-                          <ThumbsDown className={`w-5 h-5 ${post.downvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
+                          <ThumbsDown className={`w-4 h-4 ${post.downvotedBy?.includes(userId) ? 'fill-current' : ''}`} />
                         </button>
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                          <User className="w-3.5 h-3.5" />
+                        <p className="text-foreground text-[15px] font-medium leading-snug whitespace-pre-wrap break-words">
+                          {post.content}
+                        </p>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <User className="w-3 h-3 shrink-0" aria-hidden="true" />
                           <span>{t('discover.anonymous')}</span>
                           <span aria-hidden="true">·</span>
                           <time dateTime={post.createdAt}>
                             {new Date(post.createdAt).toLocaleDateString()}
                           </time>
-                          {(post.replies?.length || 0) > 0 && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span>{post.replies.length} {t('discover.comments')}</span>
-                            </>
-                          )}
+                          <span aria-hidden="true">·</span>
+                          <span>{post.replies?.length || 0} {t('discover.comments')}</span>
                         </div>
 
-                        <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
-                          {post.content}
-                        </p>
-
                         {post.imageUrl && (
-                          <div className="mt-3 rounded-xl overflow-hidden bg-muted">
+                          <div className="mt-2.5 rounded-xl overflow-hidden bg-muted">
                             <img
                               src={post.imageUrl}
                               alt=""
@@ -479,7 +452,7 @@ export function DiscoverTab({ selectedLanguages, webShell = false, onStreakActiv
                           </div>
                         )}
 
-                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <div className="mt-2 flex items-center justify-between gap-2">
                           <button
                             type="button"
                             onClick={() => setExpandedPostId(isExpanded ? null : post.id)}
@@ -602,7 +575,7 @@ export function DiscoverTab({ selectedLanguages, webShell = false, onStreakActiv
                       </div>
                     )}
                   </div>
-                </motion.article>
+                </article>
                 </div>
               )
             })}

@@ -1284,6 +1284,25 @@ export function ProfileTab({
             <Button
               variant="outline"
               className="w-full justify-between border-purple-200 dark:border-purple-500/30 hover:bg-purple-50 dark:hover:bg-purple-950/20"
+              onClick={() => {
+                if (typeof window !== 'undefined') window.location.assign('/journal/')
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center">
+                  <BookOpen className="w-4 h-4 text-fuchsia-600 dark:text-fuchsia-400" strokeWidth={2} />
+                </div>
+                <div className="text-left">
+                  <span className="block">{t('profile.journey')}</span>
+                  <span className="block text-xs text-muted-foreground font-normal">{t('profile.journeyDesc')}</span>
+                </div>
+              </div>
+              <span className="text-gray-400">→</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-between border-purple-200 dark:border-purple-500/30 hover:bg-purple-50 dark:hover:bg-purple-950/20"
               onClick={() => setIsTutorialModalOpen(true)}
             >
               <div className="flex items-center gap-3">

@@ -1,69 +1,142 @@
+import { defineConfig, type Plugin } from 'vite'
+import react from '@vitejs/plugin-react-swc'
+import path from 'path'
+import fs from 'fs'
 
-  import { defineConfig } from 'vite';
-  import react from '@vitejs/plugin-react-swc';
-  import path from 'path';
+/**
+ * Serve static public HTML for Journal + marketing routes so Vite SPA fallback
+ * cannot swallow them (flash/loop) and local preview matches GH Pages pretty URLs.
+ */
+function publicStaticRoutes(): Plugin {
+  const rewritePublicUrl = (rawUrl?: string): string | null => {
+    if (!rawUrl) return null
+    const pathname = rawUrl.split('?')[0] || ''
 
-  export default defineConfig({
-    plugins: [react()],
-    publicDir: 'public',
-    resolve: {
-      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-      alias: {
-        'vaul@1.1.2': 'vaul',
-        'sonner@2.0.3': 'sonner',
-        'recharts@2.15.2': 'recharts',
-        'react-resizable-panels@2.1.7': 'react-resizable-panels',
-        'react-hook-form@7.55.0': 'react-hook-form',
-        'react-day-picker@8.10.1': 'react-day-picker',
-        'lucide-react@0.487.0': 'lucide-react',
-        'input-otp@1.4.2': 'input-otp',
-        'figma:asset/9cc03a414696f787a5e30b129621eefb1979762e.png': path.resolve(__dirname, './src/assets/9cc03a414696f787a5e30b129621eefb1979762e.png'),
-        'figma:asset/61e85109150cbed2459a2fcb26ff986c57b9767c.png': path.resolve(__dirname, './src/assets/61e85109150cbed2459a2fcb26ff986c57b9767c.png'),
-        'figma:asset/5a1aa58d0178d59fddfa201fc0db8049ffe9a884.png': path.resolve(__dirname, './src/assets/5a1aa58d0178d59fddfa201fc0db8049ffe9a884.png'),
-        'embla-carousel-react@8.6.0': 'embla-carousel-react',
-        'cmdk@1.1.1': 'cmdk',
-        'class-variance-authority@0.7.1': 'class-variance-authority',
-        '@supabase/supabase-js@2.39.3': '@supabase/supabase-js',
-        '@radix-ui/react-tooltip@1.1.8': '@radix-ui/react-tooltip',
-        '@radix-ui/react-toggle@1.1.2': '@radix-ui/react-toggle',
-        '@radix-ui/react-toggle-group@1.1.2': '@radix-ui/react-toggle-group',
-        '@radix-ui/react-tabs@1.1.3': '@radix-ui/react-tabs',
-        '@radix-ui/react-switch@1.1.3': '@radix-ui/react-switch',
-        '@radix-ui/react-slot@1.1.2': '@radix-ui/react-slot',
-        '@radix-ui/react-slider@1.2.3': '@radix-ui/react-slider',
-        '@radix-ui/react-separator@1.1.2': '@radix-ui/react-separator',
-        '@radix-ui/react-select@2.1.6': '@radix-ui/react-select',
-        '@radix-ui/react-scroll-area@1.2.3': '@radix-ui/react-scroll-area',
-        '@radix-ui/react-radio-group@1.2.3': '@radix-ui/react-radio-group',
-        '@radix-ui/react-progress@1.1.2': '@radix-ui/react-progress',
-        '@radix-ui/react-popover@1.1.6': '@radix-ui/react-popover',
-        '@radix-ui/react-navigation-menu@1.2.5': '@radix-ui/react-navigation-menu',
-        '@radix-ui/react-menubar@1.1.6': '@radix-ui/react-menubar',
-        '@radix-ui/react-label@2.1.2': '@radix-ui/react-label',
-        '@radix-ui/react-hover-card@1.1.6': '@radix-ui/react-hover-card',
-        '@radix-ui/react-dropdown-menu@2.1.6': '@radix-ui/react-dropdown-menu',
-        '@radix-ui/react-dialog@1.1.6': '@radix-ui/react-dialog',
-        '@radix-ui/react-context-menu@2.2.6': '@radix-ui/react-context-menu',
-        '@radix-ui/react-collapsible@1.1.3': '@radix-ui/react-collapsible',
-        '@radix-ui/react-checkbox@1.1.4': '@radix-ui/react-checkbox',
-        '@radix-ui/react-avatar@1.1.3': '@radix-ui/react-avatar',
-        '@radix-ui/react-aspect-ratio@1.1.2': '@radix-ui/react-aspect-ratio',
-        '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
-        '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
-        '@jsr/supabase__supabase-js@2.49.8': '@jsr/supabase__supabase-js',
-        '@': path.resolve(__dirname, './src'),
-      },
+    if (pathname === '/journal' || pathname === '/journal/') {
+      return '/journal/index.html'
+    }
+    const journalArticleMatch = pathname.match(/^\/journal\/([^/]+)\/?$/)
+    if (journalArticleMatch) {
+      const slug = journalArticleMatch[1]
+      if (slug === 'index.html' || slug.includes('.')) return null
+      return `/journal/${slug}/index.html`
+    }
+
+    if (pathname === '/guides' || pathname === '/guides/') {
+      return '/guides/index.html'
+    }
+
+    const prettyFiles = [
+      '/stories',
+      '/features',
+      '/journey',
+      '/about',
+      '/download',
+      '/privacy',
+      '/terms',
+      '/support',
+    ]
+    if (prettyFiles.includes(pathname)) {
+      return `${pathname}.html`
+    }
+
+    const featureMatch = pathname.match(/^\/features\/([^/]+)\/?$/)
+    if (featureMatch) return `/features/${featureMatch[1]}.html`
+
+    const guideMatch = pathname.match(/^\/guides\/([^/]+)\/?$/)
+    if (guideMatch) return `/guides/${guideMatch[1]}.html`
+
+    return null
+  }
+
+  const attach = (middlewares: { use: (fn: (req: { url?: string }, res: unknown, next: () => void) => void) => void }) => {
+    middlewares.use((req, _res, next) => {
+      const rewritten = rewritePublicUrl(req.url)
+      if (rewritten) {
+        const relative = rewritten.replace(/^\//, '')
+        const inPublic = fs.existsSync(path.join(__dirname, 'public', relative))
+        const inDist = fs.existsSync(path.join(__dirname, 'dist', relative))
+        if (inPublic || inDist) {
+          const query = req.url?.includes('?') ? `?${req.url.split('?')[1]}` : ''
+          req.url = rewritten + query
+        }
+      }
+      next()
+    })
+  }
+
+  return {
+    name: 'betweenus-public-static-routes',
+    configureServer(server) {
+      attach(server.middlewares)
     },
-    build: {
-      target: 'esnext',
-      outDir: 'dist',
-      sourcemap: false,
+    configurePreviewServer(server) {
+      attach(server.middlewares)
     },
-    define: {
-      __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.1.0'),
+  }
+}
+
+export default defineConfig({
+  plugins: [react(), publicStaticRoutes()],
+  publicDir: 'public',
+  resolve: {
+    extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+    alias: {
+      'vaul@1.1.2': 'vaul',
+      'sonner@2.0.3': 'sonner',
+      'recharts@2.15.2': 'recharts',
+      'react-resizable-panels@2.1.7': 'react-resizable-panels',
+      'react-hook-form@7.55.0': 'react-hook-form',
+      'react-day-picker@8.10.1': 'react-day-picker',
+      'lucide-react@0.487.0': 'lucide-react',
+      'input-otp@1.4.2': 'input-otp',
+      'figma:asset/9cc03a414696f787a5e30b129621eefb1979762e.png': path.resolve(__dirname, './src/assets/9cc03a414696f787a5e30b129621eefb1979762e.png'),
+      'figma:asset/61e85109150cbed2459a2fcb26ff986c57b9767c.png': path.resolve(__dirname, './src/assets/61e85109150cbed2459a2fcb26ff986c57b9767c.png'),
+      'figma:asset/5a1aa58d0178d59fddfa201fc0db8049ffe9a884.png': path.resolve(__dirname, './src/assets/5a1aa58d0178d59fddfa201fc0db8049ffe9a884.png'),
+      'embla-carousel-react@8.6.0': 'embla-carousel-react',
+      'cmdk@1.1.1': 'cmdk',
+      'class-variance-authority@0.7.1': 'class-variance-authority',
+      '@supabase/supabase-js@2.39.3': '@supabase/supabase-js',
+      '@radix-ui/react-tooltip@1.1.8': '@radix-ui/react-tooltip',
+      '@radix-ui/react-toggle@1.1.2': '@radix-ui/react-toggle',
+      '@radix-ui/react-toggle-group@1.1.2': '@radix-ui/react-toggle-group',
+      '@radix-ui/react-tabs@1.1.3': '@radix-ui/react-tabs',
+      '@radix-ui/react-switch@1.1.3': '@radix-ui/react-switch',
+      '@radix-ui/react-slot@1.1.2': '@radix-ui/react-slot',
+      '@radix-ui/react-slider@1.2.3': '@radix-ui/react-slider',
+      '@radix-ui/react-separator@1.1.2': '@radix-ui/react-separator',
+      '@radix-ui/react-select@2.1.6': '@radix-ui/react-select',
+      '@radix-ui/react-scroll-area@1.2.3': '@radix-ui/react-scroll-area',
+      '@radix-ui/react-radio-group@1.2.3': '@radix-ui/react-radio-group',
+      '@radix-ui/react-progress@1.1.2': '@radix-ui/react-progress',
+      '@radix-ui/react-popover@1.1.6': '@radix-ui/react-popover',
+      '@radix-ui/react-navigation-menu@1.2.5': '@radix-ui/react-navigation-menu',
+      '@radix-ui/react-menubar@1.1.6': '@radix-ui/react-menubar',
+      '@radix-ui/react-label@2.1.2': '@radix-ui/react-label',
+      '@radix-ui/react-hover-card@1.1.6': '@radix-ui/react-hover-card',
+      '@radix-ui/react-dropdown-menu@2.1.6': '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-dialog@1.1.6': '@radix-ui/react-dialog',
+      '@radix-ui/react-context-menu@2.2.6': '@radix-ui/react-context-menu',
+      '@radix-ui/react-collapsible@1.1.3': '@radix-ui/react-collapsible',
+      '@radix-ui/react-checkbox@1.1.4': '@radix-ui/react-checkbox',
+      '@radix-ui/react-avatar@1.1.3': '@radix-ui/react-avatar',
+      '@radix-ui/react-aspect-ratio@1.1.2': '@radix-ui/react-aspect-ratio',
+      '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
+      '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
+      '@jsr/supabase__supabase-js@2.49.8': '@jsr/supabase__supabase-js',
+      '@': path.resolve(__dirname, './src'),
     },
-    server: {
-      port: 3000,
-      open: true,
-    },
-  });
+  },
+  build: {
+    target: 'esnext',
+    outDir: 'dist',
+    sourcemap: false,
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.1.0'),
+  },
+  server: {
+    port: 3000,
+    open: true,
+  },
+})

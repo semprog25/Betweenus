@@ -55,9 +55,9 @@ export function PrivacyPolicy({ isOpen, onClose }: PrivacyPolicyProps) {
             
             <p className="mb-2"><strong>Usage Information:</strong></p>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li>Login streaks and activity patterns</li>
-              <li>Subscription tier and payment information (processed securely)</li>
-              <li>Device information and analytics for app improvement</li>
+              <li>Login streaks and activity patterns stored with your account</li>
+              <li>Subscription tier (if you purchase Premium — processed via the app stores)</li>
+              <li>We do not currently use a third-party analytics SDK</li>
             </ul>
           </section>
 
@@ -76,13 +76,15 @@ export function PrivacyPolicy({ isOpen, onClose }: PrivacyPolicyProps) {
           <section>
             <h3 className="font-semibold text-purple-600 dark:text-purple-400 mb-2">4. Anonymity & Privacy</h3>
             <p className="mb-2">
-              Between Us is designed with anonymity at its core:
+              Between Us supports anonymous posting in the community feed. Server-side records still
+              associate your posts and activity with your account ID for ownership, moderation, and
+              deletion. Public APIs do not expose anonymous author IDs to other users.
             </p>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li><strong>Anonymous Posts:</strong> Your secrets and check-ins are never linked to your email or real identity</li>
-              <li><strong>Private Data:</strong> Your mood entries and wellness data are private by default</li>
-              <li><strong>Secure Storage:</strong> All data is encrypted and stored securely using Supabase</li>
-              <li><strong>No PII Collection:</strong> We do not collect personally identifiable information beyond what's necessary for authentication</li>
+              <li><strong>Anonymous Posts:</strong> Your display identity is not shown on anonymous posts in the public feed</li>
+              <li><strong>Private Data:</strong> Mood check-ins and personal journal entries are private to your account</li>
+              <li><strong>Secure Storage:</strong> Data is stored using Supabase with server-side authorization</li>
+              <li><strong>Account deletion:</strong> Settings → Account → Delete account removes your account and associated data</li>
             </ul>
           </section>
 
@@ -158,7 +160,8 @@ export function PrivacyPolicy({ isOpen, onClose }: PrivacyPolicyProps) {
               If you have questions about this Privacy Policy or our privacy practices, please contact us:
             </p>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li>Email: privacy@betweenus.app</li>
+              <li>Email: privacy@betweenus.semprog.de</li>
+              <li>Support: support@betweenus.semprog.de</li>
               <li>Through the app's "Send Feedback" feature</li>
             </ul>
           </section>

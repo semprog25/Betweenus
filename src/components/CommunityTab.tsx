@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, MessageCircle, Share2, Bookmark, Search, TrendingUp, Clock, Filter, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, X, Flag, Globe, Flame, User } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Search, TrendingUp, Clock, Filter, ThumbsUp, ThumbsDown, RefreshCw, X, Flag, Globe, Flame, User } from 'lucide-react';
 import { getCategoryIcon } from './CategoryIcons';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -13,6 +13,7 @@ import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { getSession } from '../utils/auth';
 import { getUserReputation, flagPostAsSpam } from '../utils/api';
 import { getActorId } from '../utils/actor-id';
+import { consumeOpenStoryId } from '../utils/deep-links';
 
 // Helper function for relative time
 const getRelativeTime = (dateString: string, t: (key: string) => string) => {
@@ -50,6 +51,7 @@ interface CommunityPost {
   upvotedBy?: string[];
   downvotedBy?: string[];
   replies: any[];
+  replyCount?: number;
   createdAt: string;
   categories?: string[];
   isControversial?: boolean;
@@ -64,8 +66,43 @@ interface CommunityTabProps {
   onStreakActivity?: () => void
 }
 
-const COMMUNITY_SEEN_POSTS_STORAGE_KEY = 'between_us_community_seen_posts';
-const MAX_TRACKED_SEEN_POSTS = 250;
+const COMMUNITY_FEED_LIMIT = 15;
+const COMMUNITY_CACHE_TTL_MS = 45_000;
+
+type CommunityFeedKind = 'controversial' | 'trending' | 'newest' | 'discussed' | 'all'
+type CommunityMediaFilter = 'all' | 'media' | 'text'
+
+type CommunityPostsCache = {
+  cacheKey: string
+  posts: CommunityPost[]
+  nextCursor: string | null
+  stats: { posts: number; replies: number; upvotes: number; downvotes: number } | null
+  fetchedAt: number
+}
+
+const communityFeedCaches = new Map<string, CommunityPostsCache>()
+
+function getLanguagesCacheKey(languages: string[]) {
+  return (languages.length > 0 ? languages : ['en']).join(',')
+}
+
+function buildCommunityCacheKey(parts: {
+  languages: string[]
+  feed: CommunityFeedKind
+  media: CommunityMediaFilter
+  category: string
+  q: string
+  viewMode: 'all' | 'saved'
+}) {
+  return [
+    parts.viewMode,
+    parts.feed,
+    parts.media,
+    parts.category || 'All',
+    parts.q.trim().toLowerCase() || '-',
+    getLanguagesCacheKey(parts.languages),
+  ].join(':')
+}
 
 function getCommunityAuthHeaders(): Record<string, string> {
   const session = getSession()
@@ -88,13 +125,25 @@ export function CommunityTab({
 }: CommunityTabProps) {
   const { t } = useLanguage();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [freshnessScores, setFreshnessScores] = useState<Record<string, number>>({});
+  const [feedStats, setFeedStats] = useState<{ posts: number; replies: number; upvotes: number; downvotes: number } | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<'newest' | 'trending' | 'controversial'>('newest');
+  const [sortBy, setSortBy] = useState<CommunityFeedKind>('controversial');
+  const [mediaFilter, setMediaFilter] = useState<CommunityMediaFilter>('all');
   const [viewMode, setViewMode] = useState<'all' | 'saved'>(initialViewMode);
-  const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
+  const [savedPosts, setSavedPosts] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('between-us-saved-posts');
+      if (saved) return new Set(JSON.parse(saved) as string[]);
+    } catch {
+      // ignore
+    }
+    return new Set();
+  });
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
   
@@ -105,6 +154,7 @@ export function CommunityTab({
   const [userId, setUserId] = useState(() => getActorId() || '');
   const [isTrustedUser, setIsTrustedUser] = useState(false);
   const [flaggingPostId, setFlaggingPostId] = useState<string | null>(null);
+  const feedRequestIdRef = useRef(0);
 
   useEffect(() => {
     const syncActorId = () => {
@@ -126,16 +176,83 @@ export function CommunityTab({
     setViewMode(initialViewMode)
   }, [initialViewMode])
 
-  // Load trusted user status for spam-flagging (Reddit-style moderation)
+  // Open a story shared via /story/:id (stashed before nav rewrite to /app)
   useEffect(() => {
-    const session = getSession();
-    if (session?.user?.id) {
-      getUserReputation(session.user.id).then((res) => {
-        if (res.isTrusted !== undefined) setIsTrustedUser(res.isTrusted);
-      }).catch(() => {});
-    } else {
-      setIsTrustedUser(false);
+    const storyId = consumeOpenStoryId()
+    if (!storyId) return
+
+    let cancelled = false
+    const openSharedStory = async () => {
+      try {
+        const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`
+        const actor = getActorId()
+        const viewerQuery = actor ? `?viewerId=${encodeURIComponent(actor)}` : ''
+        const response = await fetch(
+          `${baseUrl}/posts/${encodeURIComponent(storyId)}${viewerQuery}`,
+          { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        )
+        if (!response.ok || cancelled) {
+          if (!cancelled && response.status === 404) {
+            toast.error(t('community.storyNotFound', 'Story not found'))
+          }
+          return
+        }
+        const data = await response.json()
+        const full = data?.post
+        if (!full?.id || cancelled) return
+
+        setPosts((prev) => {
+          const exists = prev.some((p) => p.id === full.id)
+          if (exists) {
+            return prev.map((p) => (p.id === full.id ? { ...p, ...full, replies: full.replies || [] } : p))
+          }
+          return [{ ...full, replies: full.replies || [] }, ...prev]
+        })
+        setExpandedPosts((prev) => {
+          const next = new Set(prev)
+          next.add(full.id)
+          return next
+        })
+        setShowRepliesForPost((prev) => {
+          const next = new Set(prev)
+          next.add(full.id)
+          return next
+        })
+        window.setTimeout(() => {
+          document.getElementById(`community-post-${full.id}`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        }, 120)
+        toast.message(t('community.openedSharedStory', 'Opened shared story'))
+      } catch {
+        // non-blocking
+      }
     }
+
+    void openSharedStory()
+    return () => {
+      cancelled = true
+    }
+  }, [t])
+
+  // Load trusted user status for spam-flagging (deferred — must not block feed paint)
+  useEffect(() => {
+    let cancelled = false;
+    const session = getSession();
+    if (!session?.user?.id) {
+      setIsTrustedUser(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      getUserReputation(session.user.id).then((res) => {
+        if (!cancelled && res.isTrusted !== undefined) setIsTrustedUser(res.isTrusted);
+      }).catch(() => {});
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [userId]);
 
   const handleFlagSpam = async (postId: string) => {
@@ -200,7 +317,7 @@ export function CommunityTab({
     return t(`category.${key}`);
   };
 
-  // Load saved posts from localStorage on mount
+  // Load saved posts from localStorage on mount (state already hydrated from localStorage)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('between-us-saved-posts');
@@ -221,148 +338,215 @@ export function CommunityTab({
     }
   }, [savedPosts]);
 
-  // Helper function to fetch posts - filter by user's selected languages only
-  const getPosts = async (languages: string[]) => {
+  const activeCacheKey = buildCommunityCacheKey({
+    languages: selectedLanguages,
+    feed: sortBy,
+    media: mediaFilter,
+    category: selectedCategory,
+    q: searchQuery,
+    viewMode,
+  });
+
+  const fetchFeedPage = async (options?: { cursor?: string | null; silent?: boolean }) => {
     const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
-    const languagesParam = languages.length > 0 ? languages.join(',') : 'en';
+    const languagesParam = selectedLanguages.length > 0 ? selectedLanguages.join(',') : 'en';
     const actor = getActorId();
     const viewerQuery = actor ? `&viewerId=${encodeURIComponent(actor)}` : '';
-    const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}${viewerQuery}`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
-    });
+    const cursor = options?.cursor || null;
 
-    if (response.ok) {
-      return await response.json();
-    }
-    throw new Error('Failed to fetch posts');
-  };
-
-  const loadSeenPostIds = () => {
-    try {
-      const rawValue = localStorage.getItem(COMMUNITY_SEEN_POSTS_STORAGE_KEY);
-      if (!rawValue) return [] as string[];
-      const parsedValue = JSON.parse(rawValue);
-      if (!Array.isArray(parsedValue)) return [] as string[];
-      return parsedValue.filter((value): value is string => typeof value === 'string');
-    } catch {
-      return [] as string[];
-    }
-  };
-
-  const persistSeenPostIds = (postIds: string[]) => {
-    try {
-      localStorage.setItem(
-        COMMUNITY_SEEN_POSTS_STORAGE_KEY,
-        JSON.stringify(postIds.slice(-MAX_TRACKED_SEEN_POSTS))
+    if (viewMode === 'saved') {
+      const ids = [...savedPosts].slice(0, 50);
+      if (ids.length === 0) {
+        return { posts: [] as CommunityPost[], nextCursor: null, stats: { posts: 0, replies: 0, upvotes: 0, downvotes: 0 }, _statsParams: null };
+      }
+      const response = await fetch(
+        `${baseUrl}/posts?ids=${encodeURIComponent(ids.join(','))}${viewerQuery}`,
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
       );
-    } catch {
-      // Ignore storage write failures to avoid blocking feed rendering
-    }
-  };
-
-  const buildFreshnessScores = (postsData: CommunityPost[]) => {
-    const seenPostIds = loadSeenPostIds();
-    let seenPostIdSet = new Set(seenPostIds);
-    const hasUnseenPosts = postsData.some((post) => !seenPostIdSet.has(post.id));
-
-    if (!hasUnseenPosts) {
-      seenPostIdSet = new Set();
-      persistSeenPostIds([]);
+      if (!response.ok) throw new Error('Failed to fetch saved posts');
+      const data = await response.json();
+      return {
+        posts: (data?.posts || []) as CommunityPost[],
+        nextCursor: null,
+        stats: null,
+        _statsParams: null,
+      };
     }
 
-    const nowMs = Date.now();
-    const scoreByPostId = postsData.reduce<Record<string, number>>((acc, post) => {
-      const postTimeMs = new Date(post.createdAt).getTime();
-      const ageHours = Number.isNaN(postTimeMs) ? 48 : Math.max(1, (nowMs - postTimeMs) / 3600000);
-      const isSeen = seenPostIdSet.has(post.id);
-      const engagementScore = (post.upvotes || 0) + (post.downvotes || 0) + (post.replies?.length || 0) * 2;
-      const isViralOrHeavilyEngaged = engagementScore >= 30 || isControversialPost(post);
-      const recentBoost = Math.max(0, 1.2 - ageHours / 72);
-      const seenPenalty = isSeen ? -2.2 : 2.4;
-      const viralPenalty = isViralOrHeavilyEngaged ? -0.9 : 0.3;
-      const randomJitter = Math.random() * 0.8;
+    const params = new URLSearchParams();
+    params.set('language', languagesParam);
+    params.set('feed', sortBy);
+    params.set('media', mediaFilter);
+    params.set('limit', String(COMMUNITY_FEED_LIMIT));
+    if (selectedCategory && selectedCategory !== 'All') params.set('category', selectedCategory);
+    if (searchQuery.trim()) params.set('q', searchQuery.trim().slice(0, 120));
+    if (cursor) params.set('cursor', cursor);
+    params.set('stats', '0');
 
-      acc[post.id] = seenPenalty + recentBoost + viralPenalty + randomJitter;
-      return acc;
-    }, {});
-
-    const refreshedSeenIds = [...seenPostIds, ...postsData.map((post) => post.id)];
-    persistSeenPostIds(refreshedSeenIds);
-    return scoreByPostId;
+    const response = await fetch(
+      `${baseUrl}/posts?${params.toString()}${viewerQuery}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error('Failed to fetch posts');
+    const data = await response.json();
+    return {
+      posts: (data?.posts || []) as CommunityPost[],
+      nextCursor: (data?.nextCursor as string | null) || null,
+      stats: null as { posts: number; replies: number; upvotes: number; downvotes: number } | null,
+      _statsParams: !cursor
+        ? `${baseUrl}/posts?${(() => {
+            const sp = new URLSearchParams();
+            sp.set('language', languagesParam);
+            sp.set('feed', sortBy);
+            sp.set('media', mediaFilter);
+            sp.set('statsOnly', '1');
+            if (selectedCategory && selectedCategory !== 'All') sp.set('category', selectedCategory);
+            if (searchQuery.trim()) sp.set('q', searchQuery.trim().slice(0, 120));
+            return sp.toString();
+          })()}${viewerQuery}`
+        : null,
+    };
   };
 
-  // Load posts
-  const loadPosts = async () => {
-    setIsLoadingPosts(true);
+  const loadPosts = async (options?: { silent?: boolean; force?: boolean }) => {
+    const silent = options?.silent === true;
+    const cacheKey = buildCommunityCacheKey({
+      languages: selectedLanguages,
+      feed: sortBy,
+      media: mediaFilter,
+      category: selectedCategory,
+      q: searchQuery,
+      viewMode,
+    });
+    const cached = communityFeedCaches.get(cacheKey);
+    const cacheFresh = cached && Date.now() - cached.fetchedAt < COMMUNITY_CACHE_TTL_MS;
+
+    if (cacheFresh && !options?.force) {
+      setPosts(cached.posts);
+      setNextCursor(cached.nextCursor);
+      setFeedStats(cached.stats);
+      setIsLoadingPosts(false);
+      // Soft revalidate in background
+      const requestId = ++feedRequestIdRef.current;
+      void fetchFeedPage({ silent: true })
+        .then((result) => {
+          if (requestId !== feedRequestIdRef.current) return;
+          communityFeedCaches.set(cacheKey, {
+            cacheKey,
+            posts: result.posts,
+            nextCursor: result.nextCursor,
+            stats: result.stats,
+            fetchedAt: Date.now(),
+          });
+          setPosts(result.posts);
+          setNextCursor(result.nextCursor);
+          if (result.stats) setFeedStats(result.stats);
+        })
+        .catch(() => {});
+      return;
+    }
+
+    if (!silent) setIsLoadingPosts(true);
+    const requestId = ++feedRequestIdRef.current;
     try {
-      const response = await getPosts(selectedLanguages);
-      const postsData = response?.posts || [];
-      console.log(`Loaded community posts for languages ${selectedLanguages.join(',')}:`, postsData.length);
-      
-      const nextFreshnessScores = buildFreshnessScores(postsData);
-      setFreshnessScores(nextFreshnessScores);
-      setPosts(postsData);
+      const result = await fetchFeedPage();
+      if (requestId !== feedRequestIdRef.current) return;
+      communityFeedCaches.set(cacheKey, {
+        cacheKey,
+        posts: result.posts,
+        nextCursor: result.nextCursor,
+        stats: result.stats,
+        fetchedAt: Date.now(),
+      });
+      setPosts(result.posts);
+      setNextCursor(result.nextCursor);
+      setIsLoadingPosts(false);
+
+      if (result._statsParams) {
+        void fetch(result._statsParams, {
+          headers: { Authorization: `Bearer ${publicAnonKey}` },
+        })
+          .then(async (statsRes) => {
+            if (requestId !== feedRequestIdRef.current) return;
+            if (!statsRes.ok) return;
+            const statsData = await statsRes.json();
+            const stats = statsData?.stats || null;
+            if (!stats) return;
+            setFeedStats(stats);
+            const existing = communityFeedCaches.get(cacheKey);
+            if (existing) {
+              communityFeedCaches.set(cacheKey, { ...existing, stats });
+            }
+          })
+          .catch(() => {});
+      } else if (result.stats) {
+        setFeedStats(result.stats);
+      }
     } catch (error) {
       console.error('Error loading posts:', error);
-      toast.error('Failed to load posts');
-      setPosts([]);
-    } finally {
+      if (!silent) {
+        toast.error('Failed to load posts');
+        setPosts([]);
+        setNextCursor(null);
+      }
       setIsLoadingPosts(false);
     }
   };
 
-  // Refresh posts with animation
+  const loadMorePosts = async () => {
+    if (!nextCursor || isLoadingMore || viewMode === 'saved') return;
+    setIsLoadingMore(true);
+    try {
+      const result = await fetchFeedPage({ cursor: nextCursor });
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const merged = [...prev, ...result.posts.filter((p) => !seen.has(p.id))];
+        communityFeedCaches.set(activeCacheKey, {
+          cacheKey: activeCacheKey,
+          posts: merged,
+          nextCursor: result.nextCursor,
+          stats: feedStats,
+          fetchedAt: Date.now(),
+        });
+        return merged;
+      });
+      setNextCursor(result.nextCursor);
+    } catch (error) {
+      console.error('Error loading more posts:', error);
+      toast.error('Failed to load more posts');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const refreshPosts = async () => {
     setIsRefreshing(true);
     try {
-      // Fetch posts based on current sort filter and selected languages
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
-      const languagesParam = selectedLanguages.length > 0 ? selectedLanguages.join(',') : 'en';
-      const actor = getActorId();
-      const viewerQuery = actor ? `&viewerId=${encodeURIComponent(actor)}` : '';
-      const response = await fetch(`${baseUrl}/posts?language=${encodeURIComponent(languagesParam)}&sort=${sortBy}${viewerQuery}`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const postsData = data?.posts || [];
-        console.log(`Refreshed ${postsData.length} posts with filter: ${sortBy}`);
-        const nextFreshnessScores = buildFreshnessScores(postsData);
-        setFreshnessScores(nextFreshnessScores);
-        setPosts(postsData);
-        
-        // Show toast based on what filter is active
-        const filterMessages = {
-          newest: t('community.toast.newest'),
-          trending: t('community.toast.trending'),
-          controversial: t('community.toast.controversial'),
-        };
-        toast.success(filterMessages[sortBy] || t('community.toast.refreshed'));
-      } else {
-        throw new Error('Failed to refresh');
-      }
-    } catch (error) {
-      console.error('Error refreshing posts:', error);
+      await loadPosts({ force: true });
+      toast.success(t('community.toast.refreshed'));
+    } catch {
       toast.error('Failed to refresh posts');
     } finally {
-      setTimeout(() => setIsRefreshing(false), 500);
+      setTimeout(() => setIsRefreshing(false), 300);
     }
   };
 
   useEffect(() => {
-    loadPosts();
-  }, [selectedLanguages]);
+    void loadPosts();
+  }, [selectedLanguages, sortBy, mediaFilter, selectedCategory, searchQuery, viewMode]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   // Check if a post is truly viral/controversial
   const isControversialPost = (post: CommunityPost) => {
-    // Controversial: 10+ replies AND high engagement (upvotes + replies >= 15)
-    const totalEngagement = (post.upvotes || 0) + (post.replies?.length || 0);
-    return (post.replies?.length || 0) >= 10 && totalEngagement >= 15;
+    const replyLen = post.replyCount ?? post.replies?.length ?? 0;
+    const totalEngagement = (post.upvotes || 0) + replyLen;
+    return replyLen >= 10 && totalEngagement >= 15;
   };
 
   // Get top 2 replies for a post
@@ -373,6 +557,27 @@ export function CommunityTab({
       .slice(0, 2);
   };
 
+  const ensurePostRepliesLoaded = async (postId: string) => {
+    const existing = posts.find((p) => p.id === postId);
+    if (existing && Array.isArray(existing.replies) && existing.replies.length > 0) return;
+    try {
+      const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-6c9b0e48`;
+      const actor = getActorId();
+      const viewerQuery = actor ? `?viewerId=${encodeURIComponent(actor)}` : '';
+      const response = await fetch(`${baseUrl}/posts/${encodeURIComponent(postId)}${viewerQuery}`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const full = data?.post;
+      if (!full?.id) return;
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...full, replies: full.replies || [] } : p)));
+    } catch {
+      // non-blocking
+    }
+  };
+
+  // Handle share to social media
   // Handle share to social media
   const handleShareToSocial = (post: CommunityPost) => {
     setSelectedPost(post);
@@ -706,67 +911,19 @@ export function CommunityTab({
     }
   };
 
-  // Filter and sort posts
-  const filteredPosts = posts
-    .filter(post => {
-      // Search filter
-      if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
-      }
-      
-      // Category filter
-      if (selectedCategory !== 'All') {
-        // Since selectedCategory is now just the ID (e.g., "Dark Secrets"), we can compare directly
-        if (!post.categories?.some(cat => cat.toLowerCase() === selectedCategory.toLowerCase())) {
-          return false;
-        }
-      }
-      
-      // View mode filter
-      if (viewMode === 'saved' && !savedPosts.has(post.id)) {
-        return false;
-      }
-      
-      return true;
-    })
-    .sort((a, b) => {
-      const freshnessDelta = (freshnessScores[b.id] || 0) - (freshnessScores[a.id] || 0);
-
-      if (sortBy === 'newest') {
-        if (freshnessDelta !== 0) return freshnessDelta;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (sortBy === 'trending') {
-        const trendingDelta = (b.upvotes + b.replies.length * 2) - (a.upvotes + a.replies.length * 2);
-        if (trendingDelta !== 0) return trendingDelta;
-        return freshnessDelta;
-      }
-      if (sortBy === 'controversial') {
-        // Controversial score: combination of downvotes, upvote/downvote ratio, and high engagement
-        const aTotal = (a.upvotes || 0) + (a.downvotes || 0);
-        const bTotal = (b.upvotes || 0) + (b.downvotes || 0);
-        const aRatio = aTotal > 0 ? Math.abs((a.upvotes || 0) - (a.downvotes || 0)) / aTotal : 0;
-        const bRatio = bTotal > 0 ? Math.abs((b.upvotes || 0) - (b.downvotes || 0)) / bTotal : 0;
-        const aScore = aTotal * (1 - aRatio) + (a.replies?.length || 0) * 5;
-        const bScore = bTotal * (1 - bRatio) + (b.replies?.length || 0) * 5;
-        const controversialDelta = bScore - aScore;
-        if (controversialDelta !== 0) return controversialDelta;
-        return freshnessDelta;
-      }
-      return freshnessDelta;
-    });
+  const filteredPosts = posts;
 
   return (
     <div className={`h-full overflow-y-auto scrollbar-hide ${webShell ? 'bu-web-tab-content' : ''}`}>
-      <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 space-y-4 pb-24">
         {/* Header */}
-        <div className="bg-gradient-to-br from-purple-100 to-fuchsia-100 dark:from-purple-900/30 dark:to-fuchsia-900/30 rounded-3xl p-6 border border-purple-200 dark:border-purple-800">
+        <div className="bg-gradient-to-br from-purple-100 to-fuchsia-100 dark:from-purple-900/30 dark:to-fuchsia-900/30 rounded-2xl p-4 border border-purple-200 dark:border-purple-800">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-600 flex items-center justify-center">
-              <Globe className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-600 flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl text-purple-900 dark:text-purple-100">{t('community.feed')}</h1>
+              <h1 className="text-xl font-semibold text-purple-900 dark:text-purple-100">{t('community.feed')}</h1>
               <p className="text-sm text-purple-700 dark:text-purple-300">
                 {t('community.shareSupport')}
               </p>
@@ -776,73 +933,96 @@ export function CommunityTab({
           {/* View Tabs */}
           <div className="flex gap-2 mb-4">
             <button
+              type="button"
               onClick={() => setViewMode('all')}
-              className={`flex-1 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              aria-pressed={viewMode === 'all'}
+              className={`flex-1 px-3 py-2 rounded-xl font-medium text-sm text-center transition-colors ${
                 viewMode === 'all'
-                  ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg'
+                  ? 'bg-purple-600 text-white'
                   : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
               }`}
             >
-              <Sparkles className="w-4 h-4" />
               {t('community.tabAll')}
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('saved')}
-              className={`flex-1 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              aria-pressed={viewMode === 'saved'}
+              className={`flex-1 px-3 py-2 rounded-xl font-medium text-sm text-center transition-colors ${
                 viewMode === 'saved'
-                  ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg'
+                  ? 'bg-purple-600 text-white'
                   : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
               }`}
             >
-              <Bookmark className="w-4 h-4" />
               {t('community.tabSaved')} ({savedPosts.size})
             </button>
           </div>
           
-          {/* Sort & Filter */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-            <button
-              onClick={() => setSortBy('trending')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
-                sortBy === 'trending'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
-              }`}
-            >
-              <ThumbsUp className="w-4 h-4" />
-              {t('community.filterTrending')}
-            </button>
-            <button
-              onClick={() => setSortBy('controversial')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
-                sortBy === 'controversial'
-                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/30'
-                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50'
-              }`}
-            >
-              <Flame className="w-4 h-4" />
-              {t('community.filterControversial')}
-            </button>
-            <button
-              onClick={() => setSortBy('newest')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
-                sortBy === 'newest'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
-              }`}
-            >
-              <Clock className="w-4 h-4" />
-              {t('community.filterNew')}
-            </button>
-            <button
-              onClick={refreshPosts}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 transition-all disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {t('community.filterRefresh')}
-            </button>
-          </div>
+          {viewMode === 'all' && (
+            <>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-2" role="group" aria-label="Feed sort">
+                {([
+                  ['controversial', t('community.filterControversial')],
+                  ['trending', t('community.filterTrending')],
+                  ['newest', t('community.filterNew')],
+                  ['discussed', t('community.filterDiscussed') || 'Discussed'],
+                  ['all', t('community.filterAllFeed') || 'All'],
+                ] as Array<[CommunityFeedKind, string]>).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSortBy(id)}
+                    aria-pressed={sortBy === id}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                      sortBy === id
+                        ? id === 'controversial'
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-purple-600 text-white'
+                        : id === 'controversial'
+                          ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                          : 'bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {id === 'controversial' ? <Flame className="w-4 h-4 shrink-0" /> : null}
+                    {id === 'trending' ? <ThumbsUp className="w-4 h-4 shrink-0" /> : null}
+                    {id === 'newest' ? <Clock className="w-4 h-4 shrink-0" /> : null}
+                    {id === 'discussed' ? <MessageCircle className="w-4 h-4 shrink-0" /> : null}
+                    {label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={refreshPosts}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {t('community.filterRefresh')}
+                </button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide" role="group" aria-label="Content type">
+                {([
+                  ['all', t('community.mediaAll') || 'All'],
+                  ['media', t('community.mediaWithPictures') || 'With pictures'],
+                  ['text', t('community.mediaTextOnly') || 'Text only'],
+                ] as Array<[CommunityMediaFilter, string]>).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setMediaFilter(id)}
+                    aria-pressed={mediaFilter === id}
+                    className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                      mediaFilter === id
+                        ? 'bg-fuchsia-600 text-white'
+                        : 'bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Search */}
@@ -850,17 +1030,19 @@ export function CommunityTab({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t('community.searchPlaceholder')}
-            className="w-full pl-10 pr-10 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+            className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
           />
-          {searchQuery && (
+          {searchInput && (
             <button
-              onClick={() => setSearchQuery('')}
+              type="button"
+              onClick={() => { setSearchInput(''); setSearchQuery(''); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label="Clear search"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -877,22 +1059,18 @@ export function CommunityTab({
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-all font-medium ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors font-medium ${
                   isSelected
-                    ? isAll
-                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg'
-                      : isHotCategory
-                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/30 animate-pulse'
-                      : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg'
+                    ? isHotCategory && !isAll
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-purple-600 text-white'
                     : isHotCategory
-                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50 border-2 border-orange-300 dark:border-orange-700'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-700'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                 }`}
               >
                 {isHotCategory && !isSelected && (
-                  <span className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center animate-bounce">
-                    <Flame className="w-3 h-3 text-white" />
-                  </span>
+                  <Flame className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 )}
                 {!isAll && (!isHotCategory || isSelected) && (() => {
                   const CatIcon = getCategoryIcon(category.id);
@@ -904,41 +1082,41 @@ export function CommunityTab({
           })}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-900/30 dark:to-purple-900/10 rounded-2xl p-4 border border-purple-200 dark:border-purple-800">
-            <div className="flex items-center justify-center mb-2">
-              <MessageCircle className="w-5 h-5 text-purple-600 dark:text-purple-400 mr-2" />
-              <div className="text-3xl text-purple-700 dark:text-purple-300">{filteredPosts.length}</div>
+        {/* Stats — MVP required; visually compact */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-900/30 dark:to-purple-900/10 rounded-xl px-3 py-2.5 border border-purple-200 dark:border-purple-800">
+            <div className="flex items-center justify-center gap-1.5">
+              <MessageCircle className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <div className="text-xl font-semibold text-purple-700 dark:text-purple-300">{feedStats?.posts ?? filteredPosts.length}</div>
             </div>
-            <div className="text-xs text-center text-purple-600 dark:text-purple-400">{t('community.statPosts')}</div>
+            <div className="text-[11px] text-center text-purple-600 dark:text-purple-400">{t('community.statPosts')}</div>
           </div>
-          <div className="bg-gradient-to-br from-fuchsia-100 to-fuchsia-50 dark:from-fuchsia-900/30 dark:to-fuchsia-900/10 rounded-2xl p-4 border border-fuchsia-200 dark:border-fuchsia-800">
-            <div className="flex items-center justify-center mb-2">
-              <MessageCircle className="w-5 h-5 text-fuchsia-600 dark:text-fuchsia-400 mr-2" />
-              <div className="text-3xl text-fuchsia-700 dark:text-fuchsia-300">
-                {filteredPosts.reduce((sum, post) => sum + post.replies.length, 0)}
+          <div className="bg-gradient-to-br from-fuchsia-100 to-fuchsia-50 dark:from-fuchsia-900/30 dark:to-fuchsia-900/10 rounded-xl px-3 py-2.5 border border-fuchsia-200 dark:border-fuchsia-800">
+            <div className="flex items-center justify-center gap-1.5">
+              <MessageCircle className="w-4 h-4 text-fuchsia-600 dark:text-fuchsia-400" />
+              <div className="text-xl font-semibold text-fuchsia-700 dark:text-fuchsia-300">
+                {feedStats?.replies ?? filteredPosts.reduce((sum, post) => sum + (post.replyCount ?? post.replies?.length ?? 0), 0)}
               </div>
             </div>
-            <div className="text-xs text-center text-fuchsia-600 dark:text-fuchsia-400">{t('community.statReplies')}</div>
+            <div className="text-[11px] text-center text-fuchsia-600 dark:text-fuchsia-400">{t('community.statReplies')}</div>
           </div>
-          <div className="bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/30 dark:to-green-900/10 rounded-2xl p-4 border border-green-200 dark:border-green-800">
-            <div className="flex items-center justify-center mb-2">
-              <ThumbsUp className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" />
-              <div className="text-3xl text-green-700 dark:text-green-300">
-                {filteredPosts.reduce((sum, post) => sum + (post.upvotes || 0), 0)}
+          <div className="bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/30 dark:to-green-900/10 rounded-xl px-3 py-2.5 border border-green-200 dark:border-green-800">
+            <div className="flex items-center justify-center gap-1.5">
+              <ThumbsUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <div className="text-xl font-semibold text-green-700 dark:text-green-300">
+                {feedStats?.upvotes ?? filteredPosts.reduce((sum, post) => sum + (post.upvotes || 0), 0)}
               </div>
             </div>
-            <div className="text-xs text-center text-green-600 dark:text-green-400">{t('community.statUpvotes')}</div>
+            <div className="text-[11px] text-center text-green-600 dark:text-green-400">{t('community.statUpvotes')}</div>
           </div>
-          <div className="bg-gradient-to-br from-red-100 to-red-50 dark:from-red-900/30 dark:to-red-900/10 rounded-2xl p-4 border border-red-200 dark:border-red-800">
-            <div className="flex items-center justify-center mb-2">
-              <ThumbsDown className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
-              <div className="text-3xl text-red-700 dark:text-red-300">
-                {filteredPosts.reduce((sum, post) => sum + (post.downvotes || 0), 0)}
+          <div className="bg-gradient-to-br from-red-100 to-red-50 dark:from-red-900/30 dark:to-red-900/10 rounded-xl px-3 py-2.5 border border-red-200 dark:border-red-800">
+            <div className="flex items-center justify-center gap-1.5">
+              <ThumbsDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+              <div className="text-xl font-semibold text-red-700 dark:text-red-300">
+                {feedStats?.downvotes ?? filteredPosts.reduce((sum, post) => sum + (post.downvotes || 0), 0)}
               </div>
             </div>
-            <div className="text-xs text-center text-red-600 dark:text-red-400">{t('community.statDownvotes')}</div>
+            <div className="text-[11px] text-center text-red-600 dark:text-red-400">{t('community.statDownvotes')}</div>
           </div>
         </div>
 
@@ -983,21 +1161,19 @@ export function CommunityTab({
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredPosts.map((post, index) => {
-              const topReplies = getTopTwoReplies(post.replies);
+            {filteredPosts.map((post) => {
+              const topReplies = getTopTwoReplies(post.replies || []);
               const isControversial = isControversialPost(post);
               
               return (
-                <motion.div
+                <div
                   key={post.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border ${
+                  id={`community-post-${post.id}`}
+                  className={`bg-white dark:bg-gray-800 rounded-2xl p-4 border ${
                     isControversial 
-                      ? 'border-orange-500 dark:border-orange-600 shadow-lg shadow-orange-500/20' 
-                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-400 dark:hover:border-purple-600'
-                  } transition-all`}
+                      ? 'border-orange-500 dark:border-orange-600' 
+                      : 'border-gray-200 dark:border-gray-700'
+                  }`}
                 >
                   {/* Controversial Badge */}
                   {isControversial && (
@@ -1259,13 +1435,14 @@ export function CommunityTab({
                           newShowReplies.delete(post.id);
                         } else {
                           newShowReplies.add(post.id);
+                          void ensurePostRepliesLoaded(post.id);
                         }
                         setShowRepliesForPost(newShowReplies);
                       }}
                       className="flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
                     >
                       <MessageCircle className="w-5 h-5" />
-                      <span className="text-sm font-medium">{post.replies.length} {t('community.repliesCount')}</span>
+                      <span className="text-sm font-medium">{post.replyCount ?? post.replies?.length ?? 0} {t('community.repliesCount')}</span>
                     </button>
 
                     <button
@@ -1374,9 +1551,21 @@ export function CommunityTab({
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.div>
+                </div>
               );
             })}
+            {nextCursor && viewMode === 'all' && (
+              <div className="pt-2 pb-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void loadMorePosts()}
+                  disabled={isLoadingMore}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-purple-600 text-white disabled:opacity-50 transition-colors"
+                >
+                  {isLoadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

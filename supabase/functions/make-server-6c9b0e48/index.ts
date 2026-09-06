@@ -35,18 +35,30 @@ import {
   isValidIanaTimezone,
   registerDailyStreakActivity,
 } from "./daily-streak.tsx";
+import { deleteUserAccountData } from "./account-deletion.tsx";
+import { registerLandingCmsRoutes } from "./landing-cms.tsx";
 
 const app = new Hono();
 
 // Enable logger
 app.use('*', logger(console.log));
 
-// Enable CORS for approved origins only
+// Enable CORS for approved origins only (never invent/fallback a foreign Origin).
+// Disallowed or missing Origin must not receive Access-Control-Allow-Origin.
 app.use(
   "/*",
   cors({
-    origin: (origin) => (getAllowedOrigins().includes(origin) ? origin : getAllowedOrigins()[0]),
-    allowHeaders: ["Content-Type", "Authorization", "X-Admin-Secret"],
+    origin: (origin) => {
+      if (!origin) return null;
+      return getAllowedOrigins().includes(origin) ? origin : null;
+    },
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "apikey",
+      "X-Client-Info",
+      "X-Admin-Secret",
+    ],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -124,6 +136,9 @@ async function sendWelcomeEmail(
 app.get("/make-server-6c9b0e48/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// Editorial Journal CMS (separate from private check-in /journal KV API)
+registerLandingCmsRoutes(app);
 
 // ==================== MOOD CHECK-INS ====================
 
@@ -492,85 +507,155 @@ async function getUserReputation(userId: string): Promise<{ score: number; isTru
   return { score, isTrusted };
 }
 
-// Get all posts (Discover feed + Community)
+function parseFeedKind(raw: string | undefined): kv.CommunityFeedKind {
+  const value = String(raw || "").toLowerCase();
+  if (value === "trending") return "trending";
+  if (value === "newest" || value === "new") return "newest";
+  if (value === "discussed" || value === "discuss" || value === "most_discussed") return "discussed";
+  if (value === "all") return "all";
+  if (value === "controversial" || value === "hot") return "controversial";
+  return "controversial";
+}
+
+function parseMediaFilter(raw: string | undefined): kv.CommunityMediaFilter {
+  const value = String(raw || "all").toLowerCase();
+  if (value === "media" || value === "pictures" || value === "with_pictures" || value === "images") {
+    return "media";
+  }
+  if (value === "text" || value === "text_only" || value === "text-only") return "text";
+  return "all";
+}
+
+function encodeFeedCursor(row: kv.CommunityFeedIdRow): string {
+  return btoa(JSON.stringify([row.score, row.ts, row.post_id]));
+}
+
+function decodeFeedCursor(raw: string | undefined): kv.CommunityFeedCursor | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(atob(String(raw)));
+    if (!Array.isArray(parsed) || parsed.length < 3) return null;
+    return {
+      score: Number(parsed[0]) || 0,
+      ts: Number(parsed[1]) || 0,
+      id: String(parsed[2] || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Community / Discover feed — ranked SQL IDs + mget page (no getByPrefix scan)
 app.get("/make-server-6c9b0e48/posts", async (c) => {
   try {
-    const language = c.req.query("language"); // Single language or comma-separated: "en" or "en,es,zh"
-    const excludeIds = c.req.query("exclude"); // Comma-separated list of post IDs to exclude
-    const sortBy = c.req.query("sort"); // 'controversial', 'trending', 'newest', 'random'
+    const language = c.req.query("language");
+    const feedParam = c.req.query("feed") || c.req.query("sort") || "controversial";
+    const media = parseMediaFilter(c.req.query("media") || undefined);
+    const categoryRaw = c.req.query("category");
+    const q = c.req.query("q") || c.req.query("search") || null;
+    const idsParam = c.req.query("ids");
+    const includeReplies = c.req.query("includeReplies") === "1" || c.req.query("includeReplies") === "true";
+    const includeStats = c.req.query("stats") === "1" || c.req.query("stats") === "true";
+    const statsOnly = c.req.query("statsOnly") === "1" || c.req.query("statsOnly") === "true";
     const viewerId = await resolveOptionalViewerId(c);
-    const posts = await kv.getByPrefix("post:");
-    
-    // Filter out spam-hidden posts (flagged by trusted users)
-    let filteredPosts = (posts || []).filter((post: any) => !post.hiddenAt && !post.deletedAt);
-    if (language && language !== 'all') {
-      const userLanguages = (typeof language === 'string' ? language : String(language))
-        .split(',')
-        .map((l: string) => l.trim().toLowerCase())
-        .filter(Boolean)
-        .slice(0, 20);
-      if (userLanguages.length > 0) {
-        filteredPosts = filteredPosts.filter((post: any) => 
-          post.languages && Array.isArray(post.languages) &&
-          post.languages.some((postLang: string) => 
-            userLanguages.includes(String(postLang).toLowerCase())
-          )
-        );
-      }
-    }
-
-    // Exclude already seen posts (cap exclude list to prevent abuse)
-    if (excludeIds) {
-      const excludeSet = new Set(
-        String(excludeIds).split(',').map((id) => id.trim()).filter(Boolean).slice(0, 200),
-      );
-      filteredPosts = filteredPosts.filter((post: any) => !excludeSet.has(post.id));
-    }
-
-    // Calculate engagement scores for sorting
-    filteredPosts = filteredPosts.map((post: any) => {
-      const totalVotes = (post.upvotes || 0) + (post.downvotes || 0);
-      const controversy = Math.min(post.upvotes || 0, post.downvotes || 0) * 2 + totalVotes;
-      const replyCount = (post.replies || []).length;
-      const trending = totalVotes + (replyCount * 2);
-      
-      return {
-        ...post,
-        _controversy: controversy,
-        _trending: trending,
-        _totalVotes: totalVotes,
-        _replyCount: replyCount,
-      };
-    });
-
-    // Sort based on criteria
-    switch (sortBy) {
-      case 'controversial':
-        // Most controversial = high votes on both sides + lots of engagement
-        filteredPosts.sort((a: any, b: any) => b._controversy - a._controversy);
-        break;
-      case 'trending':
-        // Trending = high votes + replies
-        filteredPosts.sort((a: any, b: any) => b._trending - a._trending);
-        break;
-      case 'random':
-        // Shuffle array
-        filteredPosts = filteredPosts.sort(() => Math.random() - 0.5);
-        break;
-      case 'newest':
-      default:
-        // Sort by timestamp (newest first)
-        filteredPosts.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
-        break;
-    }
-
     const limit = clampLimit(c.req.query("limit"), DEFAULT_FEED_LIMIT, MAX_FEED_LIMIT);
-    filteredPosts = filteredPosts.slice(0, limit).map((post: any) => {
-      const { _controversy, _trending, _totalVotes, _replyCount, ...cleanPost } = post;
-      return toPublicPost(cleanPost, viewerId);
+
+    const languages =
+      language && language !== "all"
+        ? String(language)
+            .split(",")
+            .map((l) => l.trim().toLowerCase())
+            .filter(Boolean)
+            .slice(0, 20)
+        : [];
+
+    // Saved / explicit ID fetch — mget only, never scan all posts
+    if (idsParam) {
+      const ids = String(idsParam)
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .slice(0, MAX_FEED_LIMIT);
+      if (ids.length === 0) return c.json({ posts: [], nextCursor: null, stats: null });
+      const keys = ids.map((id) => `post:${id}`);
+      const values = await kv.mget(keys);
+      const posts = values
+        .filter((post: any) => post && !post.hiddenAt && !post.deletedAt)
+        .map((post: any) => toPublicPost(post, viewerId, { includeReplies: false }));
+      return c.json({ posts, nextCursor: null, stats: null });
+    }
+
+    const feed =
+      String(feedParam).toLowerCase() === "random"
+        ? "newest"
+        : parseFeedKind(String(feedParam));
+    const cursor = decodeFeedCursor(c.req.query("cursor") || undefined);
+    const category =
+      categoryRaw && String(categoryRaw).toLowerCase() !== "all"
+        ? String(categoryRaw)
+        : null;
+
+    if (statsOnly || (includeStats && c.req.query("limit") === "0")) {
+      const stats = await kv.getCommunityFeedStats({
+        media,
+        languages,
+        category,
+        q: q ? String(q).slice(0, 120) : null,
+      });
+      return c.json({ posts: [], nextCursor: null, stats, feed, media });
+    }
+
+    const ranked = await kv.getCommunityFeedIds({
+      feed,
+      limit: limit + 1,
+      media,
+      languages,
+      category,
+      q: q ? String(q).slice(0, 120) : null,
+      cursor,
     });
 
-    return c.json({ posts: filteredPosts });
+    const pageRows = ranked.slice(0, limit);
+    const hasMore = ranked.length > limit;
+    const keys = pageRows.map((row) => `post:${row.post_id}`);
+    const values = keys.length > 0 ? await kv.mget(keys) : [];
+    const byId = new Map<string, any>();
+    for (const post of values) {
+      if (post?.id) byId.set(String(post.id), post);
+    }
+
+    let posts = pageRows
+      .map((row) => byId.get(row.post_id))
+      .filter((post: any) => post && !post.hiddenAt && !post.deletedAt)
+      .map((post: any) => toPublicPost(post, viewerId, { includeReplies }));
+
+    if (String(feedParam).toLowerCase() === "random") {
+      posts = posts.sort(() => Math.random() - 0.5);
+    }
+
+    const nextCursor =
+      hasMore && pageRows.length > 0
+        ? encodeFeedCursor(pageRows[pageRows.length - 1])
+        : null;
+
+    let stats = null;
+    if (includeStats && !cursor) {
+      stats = await kv.getCommunityFeedStats({
+        media,
+        languages,
+        category,
+        q: q ? String(q).slice(0, 120) : null,
+      });
+    }
+
+    c.header(
+      "Cache-Control",
+      viewerId
+        ? "private, max-age=10"
+        : "public, max-age=20, stale-while-revalidate=40",
+    );
+
+    return c.json({ posts, nextCursor, stats, feed, media });
   } catch (error) {
     console.error("Error fetching posts:", error);
     return c.json({ error: "Failed to fetch posts" }, 500);
@@ -592,7 +677,7 @@ app.get("/make-server-6c9b0e48/posts/:postId", async (c) => {
 
     const viewerId = await resolveOptionalViewerId(c);
     return c.json({
-      post: toPublicPost(post, viewerId),
+      post: toPublicPost(post, viewerId, { includeReplies: true }),
     })
   } catch (error) {
     console.error("Error fetching post:", error)
@@ -1793,38 +1878,21 @@ app.get("/make-server-6c9b0e48/auth/check-username/:username", async (c) => {
   }
 });
 
-// Delete authenticated user account (App Store requirement)
+// Delete authenticated user account (App Store / GDPR requirement)
 app.post("/make-server-6c9b0e48/auth/delete-account", async (c) => {
   try {
     const authResult = await requireAuth(c);
     if (authResult.error) return authResult.error;
     const user = authResult.user!;
-
-    const supabase = getSupabaseAdmin();
     const userId = user.id;
 
-    const username = user.user_metadata?.public_username;
-    if (username) {
-      await kv.del(`username:${String(username).toLowerCase()}`);
-    }
+    const summary = await deleteUserAccountData(
+      userId,
+      user.user_metadata?.public_username,
+    );
 
-    await kv.del(`subscription:${userId}`);
-
-    const userPostKeys = await kv.getByPrefix(`user-post:${userId}:`);
-    if (userPostKeys?.length) {
-      for (const post of userPostKeys) {
-        if (post?.id) await kv.del(`post:${post.id}`);
-      }
-    }
-
-    const { error } = await supabase.auth.admin.deleteUser(userId);
-    if (error) {
-      console.error("Delete account error:", error);
-      return c.json({ error: "Failed to delete account" }, 500);
-    }
-
-    console.log(`Account deleted: ${userId}`);
-    return c.json({ success: true });
+    console.log(`Account deleted: ${userId}`, summary);
+    return c.json({ success: true, summary });
   } catch (error) {
     console.error("Delete account error:", error);
     return c.json({ error: "Failed to delete account" }, 500);

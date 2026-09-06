@@ -33,47 +33,53 @@ function PublicPageSection({ title, children }: { title: string; children: React
 }
 
 export function AboutPage() {
+  return <JourneyPage />
+}
+
+export function JourneyPage() {
   return (
-    <PublicPageShell title="About Between Us">
-      <p className="bu-public-page-lead">
+    <section className="bu-journey-page" aria-labelledby="journey-page-title">
+      <p className="bu-section-eyebrow">Our story</p>
+      <h1 id="journey-page-title" className="bu-section-title">The Between Us journey</h1>
+      <p className="bu-journey-lead">
         Between Us is an anonymous community for sharing stories you cannot say anywhere else —
         relationship secrets, hidden truths, and the things you need to get off your chest without performing for an audience.
       </p>
 
-      <PublicPageSection title="What you can do">
-        <ul className="bu-public-page-list">
-          <li><strong>Spill</strong> — write anonymous text-and-image stories</li>
-          <li><strong>Discover</strong> — browse community stories on the web or in the app</li>
-          <li><strong>React</strong> — vote and reply when signed in</li>
-          <li><strong>Check in privately</strong> — personal mood check-ins stay separate from public posts</li>
-        </ul>
-      </PublicPageSection>
+      <div className="bu-journey-blocks">
+        <article className="bu-journey-block">
+          <h2>Why we built this</h2>
+          <p>
+            Some truths are easier to share when your name is not attached. We separate your account
+            (used to sign in) from what you publish publicly as Anonymous — so you can be honest without
+            building a personal brand around your most vulnerable moments.
+          </p>
+        </article>
+        <article className="bu-journey-block">
+          <h2>What you can do</h2>
+          <p>
+            Spill anonymous text-and-image stories, discover what others share, vote and reply when signed in,
+            and keep private mood check-ins separate from the public feed. Editorial Journal pieces explore
+            the themes the community cares about — without replacing community Stories.
+          </p>
+        </article>
+        <article className="bu-journey-block">
+          <h2>Where we are headed</h2>
+          <p>
+            Between Us is available on Android via Google Play
+            {HAS_APP_STORE_LISTING ? ' and on iOS via the App Store.' : '. An iOS release is in progress — the App Store listing is coming soon.'}
+            {' '}The authenticated web experience at{' '}
+            <a href={`${CANONICAL_SITE_URL}/app`} className="bu-public-page-link">{CANONICAL_SITE_URL}/app</a>
+            {' '}works after signing in. We are growing the community carefully — with moderation, privacy, and real conversation first.
+          </p>
+        </article>
+      </div>
 
-      <PublicPageSection title="Why anonymity">
-        <p>
-          Some truths are easier to share when your name is not attached. Between Us separates your account
-          (used to sign in) from what you publish publicly as Anonymous. That lets you be honest without
-          building a personal brand around your most vulnerable moments.
-        </p>
-      </PublicPageSection>
-
-      <PublicPageSection title="Availability">
-        <p>
-          Between Us is available on Android via Google Play
-          {HAS_APP_STORE_LISTING ? ' and on iOS via the App Store.' : '. An iOS release is in progress — the App Store listing is coming soon.'}
-          {' '}You can also use the authenticated web experience at{' '}
-          <a href={`${CANONICAL_SITE_URL}/app`} className="bu-public-page-link">{CANONICAL_SITE_URL}/app</a>
-          {' '}after signing in.
-        </p>
-      </PublicPageSection>
-
-      <PublicPageSection title="Contact">
-        <p>
-          Questions? Email{' '}
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="bu-public-page-link">{SUPPORT_EMAIL}</a>.
-        </p>
-      </PublicPageSection>
-    </PublicPageShell>
+      <div className="bu-journey-cta-row">
+        <a className="bu-btn-primary" href="/stories">Explore Stories</a>
+        <a className="bu-btn-secondary" href="/download">Download the App</a>
+      </div>
+    </section>
   )
 }
 
@@ -112,6 +118,15 @@ export function PrivacyPage() {
         <p>
           Between Us uses Supabase for authentication and data storage. Service providers process data as needed
           to host and secure the product. We do not sell personal data.
+        </p>
+      </PublicPageSection>
+
+      <PublicPageSection title="Website advertising">
+        <p>
+          The Between Us Journal on the website may use Google AdSense when advertising is enabled.
+          Google and partners may then use cookies or similar technologies, including for advertising,
+          subject to applicable consent requirements in the EEA/UK. Ads are not shown in the Journal CMS editor.
+          Mobile apps may use Google AdMob separately from website AdSense.
         </p>
       </PublicPageSection>
 
@@ -232,10 +247,10 @@ export function StoreButtons({ className = '' }: { className?: string }) {
           </span>
         </a>
       ) : (
-        <span className="bu-store-badge bu-store-badge--apple" aria-label="App Store — listing coming soon">
+        <span className="bu-store-badge bu-store-badge--apple is-disabled" aria-label="App Store — listing coming soon">
           <AppleIcon />
           <span className="bu-store-badge-text">
-            <span className="bu-store-badge-label">Download on the</span>
+            <span className="bu-store-badge-label">Coming soon</span>
             <span className="bu-store-badge-name">App Store</span>
           </span>
         </span>

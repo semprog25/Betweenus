@@ -1,0 +1,231 @@
+Title:
+The Office Gossip Nobody Asked For
+
+Slug:
+the-office-gossip-nobody-asked-for
+
+Excerpt:
+Every workplace has it: the rumours, the suspicious meetings, the mysterious calendar invitations and the person who somehow knows everything.
+
+Category:
+Work Drama
+
+Tags:
+office-drama
+workplace
+gossip
+colleagues
+rumours
+
+SEO Title:
+The Office Gossip Nobody Asked For | Workplace Drama
+
+SEO Description:
+From mysterious meetings to secret conversations, every workplace has gossip. Here's why office rumours spread so quickly.
+
+SEO Keywords:
+office gossip, workplace gossip, office drama, colleague drama, workplace rumours
+
+Sections:
+
+SECTION 1
+Heading:
+Every Office Has One
+
+Block:
+Paragraph
+
+Content:
+Every workplace has that person.
+
+They know who is leaving.
+
+They know who is annoyed with management.
+
+They know who is dating someone.
+
+They know why Sarah suddenly started working from home on Fridays.
+
+And somehow, they knew about the meeting before the meeting was even scheduled.
+
+You don't know how they know.
+
+You don't even want to know.
+
+But somehow, you always end up hearing it.
+
+SECTION 2
+Heading:
+The Mysterious Meeting
+
+Block:
+Paragraph
+
+Content:
+Nothing creates office gossip faster than a mysterious meeting.
+
+Someone gets invited to:
+
+“A quick chat.”
+
+No agenda.
+
+No explanation.
+
+Just a calendar invitation.
+
+Immediately, everyone becomes an amateur detective.
+
+“Do you think it's about…”
+
+“Did you notice…”
+
+“Maybe they're…”
+
+And within twenty minutes, three completely different theories exist.
+
+Block:
+Callout
+
+Content:
+A meeting with no agenda is basically an invitation for everyone's imagination.
+
+SECTION 3
+Heading:
+The Lunchroom News Network
+
+Block:
+Paragraph
+
+Content:
+Office gossip rarely happens in the middle of a meeting.
+
+It happens in corridors.
+
+At the coffee machine.
+
+In the elevator.
+
+During lunch.
+
+In private messages that begin with:
+
+“Are you hearing this too?”
+
+Someone mentions something small.
+
+Another person adds a detail.
+
+Someone else says, “Actually, I heard…”
+
+And suddenly you've got a story.
+
+Whether the story is true is sometimes a completely different question.
+
+SECTION 4
+Heading:
+When Gossip Gets Too Far
+
+Block:
+Paragraph
+
+Content:
+There's harmless office gossip.
+
+Then there's gossip that can actually hurt someone.
+
+Speculating about someone's private life, spreading rumours about their job, making assumptions about relationships or sharing confidential information can turn workplace chatter into something much more serious.
+
+The best gossip is entertaining.
+
+The worst gossip follows someone home.
+
+Block:
+Tip
+
+Content:
+Before passing on workplace gossip, ask:
+
+Is this funny, or could this actually hurt someone?
+
+That one question can save a lot of unnecessary drama.
+
+SECTION 5
+Heading:
+And Yet… We Still Listen
+
+Block:
+Paragraph
+
+Content:
+Here's the uncomfortable truth.
+
+Even when we know office gossip can get messy, most of us still listen when someone says:
+
+“Okay, you didn't hear this from me…”
+
+Because curiosity is powerful.
+
+We want to know what's happening around us.
+
+We want to understand the strange tension in the room.
+
+We want to know why two colleagues suddenly stopped talking.
+
+And sometimes, yes, we simply want the tea.
+
+Block:
+Callout
+
+Content:
+Just remember: hearing the gossip doesn't mean you have to become part of it.
+
+SECTION 6
+Heading:
+Every Workplace Has Stories
+
+Block:
+Paragraph
+
+Content:
+Every workplace has stories.
+
+Some are true.
+
+Some are exaggerated.
+
+Some started because someone misunderstood an email.
+
+And some will probably never be explained.
+
+The smartest person in the office isn't necessarily the person who knows every secret.
+
+Sometimes it's the person who knows when not to repeat one.
+
+Final CTA paragraph:
+What's the most ridiculous piece of office gossip you've ever heard?
+
+FINAL VERIFICATION
+
+After creating the 4 drafts:
+
+1. Return to the article list.
+2. Confirm exactly 4 new drafts exist.
+3. Open each one.
+4. Confirm:
+   - Title
+   - Slug
+   - Excerpt
+   - Category
+   - Tags
+   - Sections
+   - Block types
+   - SEO title
+   - SEO description
+   - Keywords
+   - Draft status
+5. Confirm the public Journal has NOT published them.
+6. Report any CMS/editor bugs encountered rather than silently working around them.
+
+Do not publish the four articles.
+</user_query>

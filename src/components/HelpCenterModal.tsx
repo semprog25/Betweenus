@@ -47,7 +47,7 @@ const helpCategories = [
       },
       {
         question: 'How do I report harmful content?',
-        answer: 'You can report any post or reply by clicking the three dots menu and selecting "Report". Our moderation team reviews all reports within 24 hours. Serious violations may result in account suspension.',
+        answer: 'You can report any post by opening the post menu and selecting Report. Reports are stored for review by the Between Us team. Serious violations may result in content removal or account suspension. For urgent safety issues, email support@betweenus.semprog.de.',
       },
       {
         question: 'What if I\'m in crisis?',

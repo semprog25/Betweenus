@@ -49,6 +49,13 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Google sample AdMob App ID (debug / until production iOS units are wired).
+	     Must match capacitor.config.ts plugins.AdMob.appIdIos and ADMOB_TEST.iosAppId.
+	     Production builds: set VITE_ADMOB_IOS_APP_ID and replace this value before store release. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Between Us uses this identifier to deliver relevant ads and measure ad performance.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Between Us uses the camera so you can update your profile picture.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

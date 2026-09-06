@@ -157,10 +157,10 @@ export function AuthModal({ open, mode, onClose, onModeChange }: AuthModalProps)
         </div>
 
         <h2 id="auth-modal-title" className="bu-auth-title">
-          {mode === 'signup' ? 'Sign up' : 'Log in'}
+          {mode === 'signup' ? 'Join Between Us' : 'Welcome back'}
         </h2>
         <p className="bu-auth-subtitle">
-          Your real identity doesn&apos;t have to be your public identity.
+          Anonymous Stories and Spills. Your account is for sign-in — what you post can stay Anonymous to everyone else.
         </p>
 
         <div className="bu-auth-actions">

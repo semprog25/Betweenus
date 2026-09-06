@@ -2,10 +2,9 @@ import { Suspense, type ReactNode } from 'react'
 import {
   Activity,
   Bookmark,
-  Globe,
+  Compass,
   Home,
   Loader2,
-  MessageSquare,
   MessageSquarePlus,
   PenSquare,
   Settings,
@@ -38,12 +37,13 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'home', label: 'Home', icon: Home, tab: 'discover' },
-  { id: 'stories', label: 'Stories', icon: Globe, tab: 'community', communityView: 'all' },
-  { id: 'write', label: 'Write a Story', icon: PenSquare, tab: 'share' },
-  { id: 'activity', label: 'Activity', icon: Activity, tab: 'checkin' },
-  { id: 'messages', label: 'Messages', icon: MessageSquare, tab: 'community', communityView: 'all' },
+  { id: 'home', label: 'Home', icon: Home, tab: 'community' },
+  // Stories owns the full Community MVP (All Posts | Saved live inside CommunityTab)
+  { id: 'stories', label: 'Stories', icon: Compass, tab: 'discover' },
+  { id: 'write', label: 'Spill', icon: PenSquare, tab: 'share' },
+  { id: 'activity', label: 'Check-in', icon: Activity, tab: 'checkin' },
   { id: 'profile', label: 'Profile', icon: User, tab: 'profile' },
+  // Saved is sidebar-only — same Community experience, Saved filter preselected
   { id: 'saved', label: 'Saved', icon: Bookmark, tab: 'community', communityView: 'saved' },
   { id: 'settings', label: 'Settings', icon: Settings, tab: 'profile' },
 ]
@@ -51,9 +51,9 @@ const NAV_ITEMS: NavItem[] = [
 const PAGE_TITLES: Record<WebNavId, string> = {
   home: 'Home',
   stories: 'Stories',
-  write: 'Write a Story',
-  activity: 'Activity',
-  messages: 'Messages',
+  write: 'Spill',
+  activity: 'Check-in',
+  messages: 'Stories',
   profile: 'Profile',
   saved: 'Saved',
   settings: 'Settings',
@@ -151,7 +151,7 @@ export function WebAppShell({
                 className="bu-web-header-cta hidden sm:inline-flex"
               >
                 <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-                Write a Story
+                Spill
               </button>
             )}
           </div>
@@ -161,7 +161,7 @@ export function WebAppShell({
             onClick={() => setActiveNav('write')}
             className="bu-web-mobile-write"
           >
-            Write
+            Spill
           </button>
         </header>
 
@@ -190,9 +190,9 @@ export function WebAppShell({
         <nav className="bu-web-mobile-nav shrink-0 border-t border-white/8 bg-[#0b0912]" aria-label="Mobile">
           {[
             { nav: 'home' as WebNavId, icon: Home, label: 'Home' },
-            { nav: 'stories' as WebNavId, icon: Globe, label: 'Stories' },
-            { nav: 'write' as WebNavId, icon: PenSquare, label: 'Write' },
-            { nav: 'activity' as WebNavId, icon: Activity, label: 'Activity' },
+            { nav: 'stories' as WebNavId, icon: Compass, label: 'Stories' },
+            { nav: 'write' as WebNavId, icon: PenSquare, label: 'Spill' },
+            { nav: 'activity' as WebNavId, icon: Activity, label: 'Check-in' },
             { nav: 'profile' as WebNavId, icon: User, label: 'Profile' },
           ].map(({ nav, icon: Icon, label }) => (
             <button

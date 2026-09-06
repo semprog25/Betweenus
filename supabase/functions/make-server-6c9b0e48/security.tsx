@@ -25,7 +25,7 @@ export const MAX_REPLY_CONTENT_LENGTH = 2000;
 export const MAX_JOURNAL_CONTENT_LENGTH = 10000;
 export const MAX_CHECKIN_NOTE_LENGTH = 2000;
 export const MAX_FEED_LIMIT = 50;
-export const DEFAULT_FEED_LIMIT = 25;
+export const DEFAULT_FEED_LIMIT = 15;
 export const MAX_USERNAME_LENGTH = 24;
 
 const ANONYMOUS_VOTER_PATTERN = /^anonymous-user-[a-z0-9]{6,24}$/;
@@ -300,14 +300,21 @@ function toPublicReply(reply: any, viewerId?: string | null) {
 /**
  * Strip internal identity / vote-list fields from public feed and story responses.
  * Viewer-only vote arrays preserve client UI without leaking other actors.
+ * @param options.includeReplies when false (feed default), only replyCount is returned.
  */
-export function toPublicPost(post: any, viewerId?: string | null) {
+export function toPublicPost(
+  post: any,
+  viewerId?: string | null,
+  options?: { includeReplies?: boolean },
+) {
   if (!post || typeof post !== "object") return post;
 
+  const includeReplies = options?.includeReplies !== false;
   const upvotedBy = Array.isArray(post.upvotedBy) ? post.upvotedBy : [];
   const downvotedBy = Array.isArray(post.downvotedBy) ? post.downvotedBy : [];
-  const replies = Array.isArray(post.replies)
-    ? post.replies.map((reply: any) => toPublicReply(reply, viewerId))
+  const rawReplies = Array.isArray(post.replies) ? post.replies : [];
+  const replies = includeReplies
+    ? rawReplies.map((reply: any) => toPublicReply(reply, viewerId))
     : [];
 
   const publicPost: Record<string, unknown> = {
@@ -324,7 +331,7 @@ export function toPublicPost(post: any, viewerId?: string | null) {
     upvotedBy: viewerId && upvotedBy.includes(viewerId) ? [viewerId] : [],
     downvotedBy: viewerId && downvotedBy.includes(viewerId) ? [viewerId] : [],
     replies,
-    replyCount: replies.length,
+    replyCount: typeof post.replyCount === "number" ? post.replyCount : rawReplies.length,
     createdAt: post.createdAt,
     timestamp: post.timestamp,
     isEdited: Boolean(post.isEdited),
@@ -362,4 +369,47 @@ export async function resolveOptionalViewerId(c: Context): Promise<string | null
 
   if (isValidAnonymousActorId(viewerId)) return viewerId;
   return null;
+}
+
+const UUID_STRICT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Editorial CMS bootstrap admins — Edge secret LANDING_CMS_BOOTSTRAP_ADMIN_IDS (comma-separated UUIDs). */
+export function parseLandingCmsBootstrapAdminIds(): Set<string> {
+  const raw = Deno.env.get("LANDING_CMS_BOOTSTRAP_ADMIN_IDS") || "";
+  const ids = new Set<string>();
+  for (const part of raw.split(",")) {
+    const t = part.trim().toLowerCase();
+    if (UUID_STRICT.test(t)) ids.add(t);
+  }
+  return ids;
+}
+
+export function normalizeAuthUserId(userId: string): string {
+  const u = (userId || "").trim().toLowerCase();
+  if (u.startsWith("user_")) return u.slice(5);
+  return u;
+}
+
+/**
+ * Editorial Journal CMS admin gate.
+ * Requires valid JWT + user id in LANDING_CMS_BOOTSTRAP_ADMIN_IDS.
+ * Never trusts client role/admin flags.
+ */
+export async function requireLandingCmsAdmin(c: Context): Promise<{
+  user: Awaited<ReturnType<typeof getAuthUser>>;
+  error: Response | null;
+}> {
+  const auth = await requireAuth(c);
+  if (auth.error || !auth.user) {
+    return { user: null, error: auth.error };
+  }
+  const uid = normalizeAuthUserId(auth.user.id);
+  if (!parseLandingCmsBootstrapAdminIds().has(uid)) {
+    return {
+      user: null,
+      error: c.json({ error: "Forbidden: Journal CMS admin access required" }, 403),
+    };
+  }
+  return { user: auth.user, error: null };
 }

@@ -1,212 +1,302 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Button } from './ui/button';
-import { CheckCircle, Compass, MessageSquarePlus, ArrowRight, X, Award } from 'lucide-react';
-import { useLanguage } from './LanguageContext';
+import { useEffect, useState } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
+import { Capacitor } from '@capacitor/core'
+import { Button } from './ui/button'
+import {
+  Compass,
+  MessageSquarePlus,
+  CheckCircle,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react'
+import { useLanguage } from './LanguageContext'
+import { markTutorialCompleted } from '../utils/onboarding-state'
+import logoImage from '../assets/betweenus-logo.png'
 
 interface TutorialProps {
-  onComplete: () => void;
+  onComplete: () => void
 }
 
+type WelcomePhase = 'welcome' | 'tour'
+
+const TOUR_STEPS = [
+  {
+    id: 'discover',
+    icon: Compass,
+    titleKey: 'welcome.tour.discover.title',
+    bodyKey: 'welcome.tour.discover.body',
+    gradient: 'from-cyan-500 via-blue-500 to-purple-600',
+  },
+  {
+    id: 'write',
+    icon: MessageSquarePlus,
+    titleKey: 'welcome.tour.write.title',
+    bodyKey: 'welcome.tour.write.body',
+    gradient: 'from-orange-500 via-pink-500 to-red-600',
+  },
+  {
+    id: 'checkin',
+    icon: CheckCircle,
+    titleKey: 'welcome.tour.checkin.title',
+    bodyKey: 'welcome.tour.checkin.body',
+    gradient: 'from-purple-500 via-pink-500 to-fuchsia-600',
+  },
+] as const
+
+const BENEFITS = [
+  'welcome.benefit.share',
+  'welcome.benefit.discover',
+  'welcome.benefit.checkin',
+] as const
+
+/**
+ * Short welcome experience (replaces the old 4-page feature tutorial).
+ * Primary CTA enters the app immediately; "How it works" is optional (≤3 steps).
+ */
 export function Tutorial({ onComplete }: TutorialProps) {
-  const { t } = useLanguage();
-  const [currentStep, setCurrentStep] = useState(0);
+  const { t } = useLanguage()
+  const prefersReducedMotion = useReducedMotion()
+  const [phase, setPhase] = useState<WelcomePhase>('welcome')
+  const [tourStep, setTourStep] = useState(0)
 
-  const steps = [
-    {
-      title: t('tutorial.checkin.title') || 'Daily Check-In',
-      description: t('tutorial.checkin.description') || 'Track your mood and emotions daily. Share how you feel, what activities you did, and add journal notes. Build streaks and earn points!',
-      icon: CheckCircle,
-      gradient: 'from-purple-500 via-pink-500 to-fuchsia-600',
-      features: [
-        t('tutorial.checkin.feature1') || 'Choose from 6 main moods',
-        t('tutorial.checkin.feature2') || 'Add detailed emotions',
-        t('tutorial.checkin.feature3') || 'Track activities and journal',
-        t('tutorial.checkin.feature4') || 'Build daily streaks'
-      ]
-    },
-    {
-      title: t('tutorial.discover.title') || 'Discover & Discuss',
-      description: t('tutorial.discover.description') || 'Browse community gossip and stories. Vote on posts and join text discussions.',
-      icon: Compass,
-      gradient: 'from-cyan-500 via-blue-500 to-purple-600',
-      features: [
-        t('tutorial.discover.feature1') || 'Explore trending and new posts',
-        t('tutorial.discover.feature2') || 'Upvote and downvote posts',
-        t('tutorial.discover.feature3') || 'Leave comments and replies',
-        t('tutorial.discover.feature4') || 'Filter by trending, new, or hot',
-      ]
-    },
-    {
-      title: t('tutorial.share.title') || 'Share Your Thoughts',
-      description: t('tutorial.share.description') || 'Anonymously share what\'s on your mind. Choose your mood, write your thoughts, and receive support from the community in a safe space.',
-      icon: MessageSquarePlus,
-      gradient: 'from-orange-500 via-pink-500 to-red-600',
-      features: [
-        t('tutorial.share.feature1') || 'Completely anonymous',
-        t('tutorial.share.feature2') || 'Express your feelings',
-        t('tutorial.share.feature3') || 'Receive community support',
-        t('tutorial.share.feature4') || 'Safe and judgment-free'
-      ]
-    },
-    {
-      title: t('tutorial.levels.title') || 'Level Up & Earn Badges',
-      description: t('tutorial.levels.description') || 'Track your progress with levels and achievement badges. Every interaction counts towards your journey in the Between Us community!',
-      icon: Award,
-      gradient: 'from-yellow-500 via-amber-500 to-orange-600',
-      features: [
-        t('tutorial.levels.feature1') || 'Progress through 5 levels',
-        t('tutorial.levels.feature2') || 'Earn activity points',
-        t('tutorial.levels.feature3') || 'Unlock achievement badges',
-        t('tutorial.levels.feature4') || 'Track your journey'
-      ]
+  const finish = () => {
+    markTutorialCompleted({ enableContextualHints: true })
+    onComplete()
+  }
+
+  const handleStartExploring = () => {
+    finish()
+  }
+
+  const handleHowItWorks = () => {
+    setPhase('tour')
+    setTourStep(0)
+  }
+
+  const handleTourNext = () => {
+    if (tourStep < TOUR_STEPS.length - 1) {
+      setTourStep(tourStep + 1)
+      return
     }
-  ];
+    finish()
+  }
 
-  const currentStepData = steps[currentStep];
-  const Icon = currentStepData.icon;
+  const handleTourSkip = () => {
+    finish()
+  }
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      onComplete();
+  const handleTourBack = () => {
+    if (tourStep > 0) {
+      setTourStep(tourStep - 1)
+      return
     }
-  };
+    setPhase('welcome')
+  }
 
-  const handleSkip = () => {
-    onComplete();
-  };
+  // Android system Back: move within Welcome/tour; never corrupt completion state.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    let remove: (() => void) | undefined
+    let cancelled = false
+
+    void import('@capacitor/app').then(({ App }) => {
+      if (cancelled) return
+      App.addListener('backButton', ({ canGoBack }) => {
+        if (phase === 'tour') {
+          if (tourStep > 0) {
+            setTourStep((step) => Math.max(0, step - 1))
+            return
+          }
+          setPhase('welcome')
+          return
+        }
+        // On the root Welcome screen, allow default (minimize/exit) — do not mark complete.
+        if (canGoBack) {
+          window.history.back()
+          return
+        }
+        void App.minimizeApp()
+      }).then((handle) => {
+        remove = () => {
+          void handle.remove()
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+      remove?.()
+    }
+  }, [phase, tourStep])
+
+  const currentTour = TOUR_STEPS[tourStep]
+  const TourIcon = currentTour.icon
+  const panelTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.25 }
+  const welcomeTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.3 }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
-      {/* Background orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          className="absolute w-96 h-96 rounded-full blur-3xl opacity-20 bg-gradient-to-br from-purple-500 to-fuchsia-500"
-          animate={{
-            x: [0, 100, 0],
-            y: [0, -100, 0],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-          style={{ top: '10%', left: '10%' }}
-        />
-        <motion.div
-          className="absolute w-96 h-96 rounded-full blur-3xl opacity-20 bg-gradient-to-br from-cyan-500 to-blue-500"
-          animate={{
-            x: [0, -100, 0],
-            y: [0, 100, 0],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-          style={{ bottom: '10%', right: '10%' }}
-        />
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-[#0f0f1e]"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px), 48px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px), 24px)',
+      }}
+    >
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        {!prefersReducedMotion && (
+          <>
+            <motion.div
+              className="absolute w-96 h-96 rounded-full blur-3xl opacity-20 bg-gradient-to-br from-purple-500 to-fuchsia-500"
+              animate={{ x: [0, 80, 0], y: [0, -60, 0], scale: [1, 1.15, 1] }}
+              transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ top: '8%', left: '5%' }}
+            />
+            <motion.div
+              className="absolute w-96 h-96 rounded-full blur-3xl opacity-20 bg-gradient-to-br from-cyan-500 to-blue-500"
+              animate={{ x: [0, -60, 0], y: [0, 80, 0], scale: [1, 1.1, 1] }}
+              transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ bottom: '8%', right: '5%' }}
+            />
+          </>
+        )}
       </div>
 
-      {/* Skip button */}
-      <button
-        onClick={handleSkip}
-        aria-label="Skip tutorial"
-        className="absolute top-[max(var(--safe-area-inset-top),24px)] right-6 z-10 p-2 rounded-full bg-gray-200/50 dark:bg-gray-800/50 hover:bg-gray-300/50 dark:hover:bg-gray-700/50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-      >
-        <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-      </button>
-
-      {/* Content */}
-      <div className="relative max-w-lg w-full">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentStep}
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 sm:p-12"
-          >
-            {/* Icon */}
-            <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${currentStepData.gradient} mb-6`}>
-              <Icon className="w-8 h-8 text-white" />
-            </div>
-
-            {/* Title */}
-            <h2 className="mb-4 text-gray-900 dark:text-white">
-              {currentStepData.title}
-            </h2>
-
-            {/* Description */}
-            <p className="mb-8 text-gray-600 dark:text-gray-400">
-              {currentStepData.description}
-            </p>
-
-            {/* Features */}
-            <ul className="space-y-3 mb-8">
-              {currentStepData.features.map((feature, index) => (
-                <motion.li
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 + 0.2 }}
-                  className="flex items-start gap-3"
-                >
-                  <div className={`mt-0.5 p-1 rounded-full bg-gradient-to-br ${currentStepData.gradient}`}>
-                    <div className="w-2 h-2 bg-white rounded-full" />
-                  </div>
-                  <span className="text-gray-700 dark:text-gray-300">{feature}</span>
-                </motion.li>
-              ))}
-            </ul>
-
-            {/* Progress dots */}
-            <div className="flex items-center justify-center gap-2 mb-8">
-              {steps.map((_, index) => (
-                <div
-                  key={index}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    index === currentStep
-                      ? `w-8 bg-gradient-to-r ${currentStepData.gradient}`
-                      : 'w-2 bg-gray-300 dark:bg-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-3">
-              {currentStep > 0 && (
-                <Button
-                  onClick={() => setCurrentStep(currentStep - 1)}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  {t('tutorial.back') || 'Back'}
-                </Button>
-              )}
-              <Button
-                onClick={handleNext}
-                className={`flex-1 bg-gradient-to-r ${currentStepData.gradient} text-white hover:opacity-90`}
+      <div className="relative mx-auto flex min-h-full w-full max-w-lg items-center justify-center p-6">
+        <div className="relative w-full">
+          <AnimatePresence mode="wait">
+            {phase === 'welcome' ? (
+              <motion.div
+                key="welcome"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -16 }}
+                transition={welcomeTransition}
+                className="rounded-3xl border border-white/10 bg-white/5 p-8 sm:p-10 backdrop-blur-sm"
               >
-                {currentStep < steps.length - 1 ? (
-                  <>
-                    {t('tutorial.next') || 'Next'}
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
-                ) : (
-                  t('tutorial.getStarted') || 'Get Started'
-                )}
-              </Button>
-            </div>
-          </motion.div>
-        </AnimatePresence>
+                <div className="flex justify-center mb-6">
+                  <img src={logoImage} alt="Between Us" className="h-10 w-auto" />
+                </div>
+
+                <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-pink-500 mb-5">
+                  <Sparkles className="w-7 h-7 text-white" aria-hidden="true" />
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-3">
+                  {t('welcome.title')}
+                </h1>
+                <p className="text-gray-300 leading-relaxed mb-8">
+                  {t('welcome.subtitle')}
+                </p>
+
+                <ul className="space-y-3 mb-10">
+                  {BENEFITS.map((key) => (
+                    <li key={key} className="flex items-start gap-3">
+                      <span
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-400"
+                        aria-hidden="true"
+                      />
+                      <span className="text-gray-200">{t(key)}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="flex flex-col gap-3">
+                  <Button
+                    onClick={handleStartExploring}
+                    className="w-full min-h-[48px] rounded-xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 text-white hover:opacity-90"
+                  >
+                    {t('welcome.cta.start')}
+                    <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    onClick={handleHowItWorks}
+                    variant="ghost"
+                    className="w-full min-h-[44px] text-gray-300 hover:text-white hover:bg-white/5"
+                  >
+                    {t('welcome.cta.howItWorks')}
+                  </Button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`tour-${tourStep}`}
+                initial={prefersReducedMotion ? false : { opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, x: -40 }}
+                transition={panelTransition}
+                className="rounded-3xl border border-white/10 bg-white/5 p-8 sm:p-10 backdrop-blur-sm"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <p className="text-xs text-gray-400">
+                    {t('welcome.tour.progress')
+                      .replace('{current}', String(tourStep + 1))
+                      .replace('{total}', String(TOUR_STEPS.length))}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleTourSkip}
+                    className="min-h-[44px] px-3 text-sm text-gray-400 hover:text-white"
+                  >
+                    {t('welcome.tour.skip')}
+                  </button>
+                </div>
+
+                <div
+                  className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${currentTour.gradient} mb-6`}
+                >
+                  <TourIcon className="w-8 h-8 text-white" aria-hidden="true" />
+                </div>
+
+                <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
+                  {t(currentTour.titleKey)}
+                </h2>
+                <p className="text-gray-300 leading-relaxed mb-8">
+                  {t(currentTour.bodyKey)}
+                </p>
+
+                <div className="flex items-center justify-center gap-2 mb-8" aria-hidden="true">
+                  {TOUR_STEPS.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`h-2 rounded-full transition-all duration-300 motion-reduce:transition-none ${
+                        index === tourStep
+                          ? `w-8 bg-gradient-to-r ${currentTour.gradient}`
+                          : 'w-2 bg-gray-600'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex gap-3">
+                  {(tourStep > 0 || phase === 'tour') && (
+                    <Button
+                      onClick={handleTourBack}
+                      variant="outline"
+                      className="flex-1 min-h-[48px] border-white/20 bg-transparent text-gray-200 hover:bg-white/5"
+                    >
+                      {t('welcome.tour.back')}
+                    </Button>
+                  )}
+                  <Button
+                    onClick={handleTourNext}
+                    className={`flex-1 min-h-[48px] bg-gradient-to-r ${currentTour.gradient} text-white hover:opacity-90`}
+                  >
+                    {tourStep < TOUR_STEPS.length - 1
+                      ? t('welcome.tour.next')
+                      : t('welcome.cta.start')}
+                    <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
-  );
+  )
 }
