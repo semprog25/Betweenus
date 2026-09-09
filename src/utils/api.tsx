@@ -244,6 +244,7 @@ export async function getSubscription(_userId?: string) {
   return callServer('/subscription', { method: 'GET' });
 }
 
+/** @deprecated Direct upgrades are blocked; use createCheckoutSession or RevenueCat. */
 export async function upgradeSubscription(_userId: string, tier: 'premium' | 'pro') {
   return callServer('/subscription/upgrade', {
     method: 'POST',
@@ -251,11 +252,30 @@ export async function upgradeSubscription(_userId: string, tier: 'premium' | 'pr
   });
 }
 
+/** @deprecated Direct credit buys are blocked; use Stripe / IAP. */
 export async function buyCredits(_userId: string, amount: number) {
   return callServer('/subscription/buy-credits', {
     method: 'POST',
     body: JSON.stringify({ amount }),
   });
+}
+
+export async function createCheckoutSession(params: {
+  planId: string
+  successUrl: string
+  cancelUrl: string
+}) {
+  return callServer('/subscription/checkout', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function createBillingPortalSession(params: { returnUrl: string }) {
+  return callServer('/subscription/portal', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
 }
 
 export async function canPost(_userId?: string) {

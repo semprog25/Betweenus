@@ -233,6 +233,37 @@ async function main() {
     assert('upgrade requires auth', status === 401, `status=${status}`)
   }
 
+  // 11b. Payment webhooks reject unsigned / unauthorized requests
+  {
+    const stripe = await request('/webhooks/stripe', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'checkout.session.completed', data: { object: {} } }),
+    })
+    if (stripe.status === 404) {
+      console.log('SKIP stripe webhook auth — Edge not redeployed with /webhooks/stripe yet')
+    } else {
+      assert(
+        'stripe webhook rejects unsigned payload',
+        stripe.status === 401 || stripe.status === 503,
+        `status=${stripe.status}`,
+      )
+    }
+
+    const rc = await request('/webhooks/revenuecat', {
+      method: 'POST',
+      body: JSON.stringify({ event: { type: 'INITIAL_PURCHASE', app_user_id: '00000000-0000-4000-8000-000000000001' } }),
+    })
+    if (rc.status === 404) {
+      console.log('SKIP revenuecat webhook auth — Edge not redeployed with /webhooks/revenuecat yet')
+    } else {
+      assert(
+        'revenuecat webhook rejects missing auth',
+        rc.status === 401 || rc.status === 503,
+        `status=${rc.status}`,
+      )
+    }
+  }
+
   // 12. Account deletion requires auth
   {
     const { status } = await request('/auth/delete-account', { method: 'POST', body: '{}' })
@@ -378,6 +409,17 @@ async function main() {
         'authenticated upgrade blocked in non-dev',
         upgrade.status === 403 && upgrade.json?.code === 'PAYMENT_REQUIRED',
         `status=${upgrade.status} code=${upgrade.json?.code}`,
+      )
+
+      const buyCredits = await request('/subscription/buy-credits', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
+        body: JSON.stringify({ amount: 5 }),
+      })
+      assert(
+        'authenticated buy-credits blocked',
+        buyCredits.status === 403 && buyCredits.json?.code === 'PAYMENT_REQUIRED',
+        `status=${buyCredits.status} code=${buyCredits.json?.code}`,
       )
 
       // Normal authenticated users must not access Journal CMS

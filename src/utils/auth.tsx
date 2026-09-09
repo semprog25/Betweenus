@@ -303,6 +303,12 @@ export async function signOut() {
     }
 
     clearSession();
+    try {
+      const { logoutUser } = await import('./revenuecat')
+      await logoutUser()
+    } catch {
+      // native-only; ignore on web
+    }
     return { success: true };
   } catch (error) {
     console.error('Sign out error:', error);

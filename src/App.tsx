@@ -149,6 +149,44 @@ function NativeAppContent() {
     })
   }, [])
 
+  // Native: configure RevenueCat once; identify after auth session is known
+  useEffect(() => {
+    const session = getSession()
+    const userId = session?.user?.id
+    import('./utils/revenuecat').then(({ initializeRevenueCat, identifyUser }) => {
+      initializeRevenueCat(userId).then((ok) => {
+        if (ok && userId) identifyUser(userId).catch(() => {})
+      }).catch(() => {})
+    }).catch(() => {})
+  }, [])
+
+  // After Stripe Checkout return (?checkout=success), refresh entitlement once webhooks land
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const checkout = params.get('checkout')
+    if (checkout !== 'success') return
+
+    import('./utils/api').then(({ getSubscription }) => {
+      const poll = async () => {
+        for (let i = 0; i < 6; i++) {
+          try {
+            await getSubscription()
+          } catch {
+            // ignore
+          }
+          await new Promise((r) => setTimeout(r, 700 + i * 300))
+        }
+      }
+      void poll()
+    })
+
+    params.delete('checkout')
+    params.delete('plan')
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`
+    window.history.replaceState({}, '', next)
+  }, [])
+
   // Check if user is test/skip account to show Reset button
   useEffect(() => {
     const session = getSession();

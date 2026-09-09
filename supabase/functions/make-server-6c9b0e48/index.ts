@@ -10,7 +10,6 @@ import {
   requireAuth,
   requireAdmin,
   assertMatchingUserId,
-  isProductionRuntime,
   resolveActorId,
   resolveAuthenticatedActorId,
   requireSelfUserId,
@@ -37,6 +36,18 @@ import {
 } from "./daily-streak.tsx";
 import { deleteUserAccountData } from "./account-deletion.tsx";
 import { registerLandingCmsRoutes } from "./landing-cms.tsx";
+import { getSubscriptionRecord } from "./entitlements.tsx";
+import {
+  createStripeBillingPortalSession,
+  createStripeCheckoutSession,
+  getRevenueCatWebhookSecret,
+  getStripeWebhookSecret,
+  handleRevenueCatWebhookEvent,
+  handleStripeWebhookEvent,
+  isStripeConfigured,
+  verifyRevenueCatWebhookAuth,
+  verifyStripeWebhookSignature,
+} from "./payments.tsx";
 
 const app = new Hono();
 
@@ -2409,140 +2420,219 @@ app.get("/make-server-6c9b0e48/subscription", async (c) => {
     const self = await requireSelfUserId(c);
     if (self.error) return self.error;
     const userId = self.userId!;
-    
-    // Get user's subscription data
-    const subscription = await kv.get(`subscription:${userId}`) || {
-      tier: 'free', // free, premium, pro
-      credits: 0, // Edit credits for premium features
-      postsThisMonth: 0,
-      monthlyPostLimit: 3, // Free users: 3 posts/month
-      expiresAt: null,
-      features: {
-        canEditPosts: false,
-        unlimitedPosts: false,
-        prioritySupport: false,
-      }
-    };
-    
-    return c.json({ subscription });
+    const subscription = await getSubscriptionRecord(userId);
+    return c.json({
+      subscription,
+      payments: {
+        stripeConfigured: isStripeConfigured(),
+      },
+    });
   } catch (error) {
     console.error("Error fetching subscription:", error);
     return c.json({ error: "Failed to fetch subscription" }, 500);
   }
 });
 
-// Update subscription (upgrade/downgrade) — requires auth; payment provider must confirm in production
+// Direct upgrades are never allowed — Stripe / RevenueCat webhooks grant entitlements
 app.post("/make-server-6c9b0e48/subscription/upgrade", async (c) => {
   try {
     const authResult = await requireAuth(c);
     if (authResult.error) return authResult.error;
-    const user = authResult.user!;
-
-    const body = await c.req.json();
-    const { tier } = body; // tier: 'premium' or 'pro'
-    const userId = user.id;
-    
-    if (!tier) {
-      return c.json({ error: "tier is required" }, 400);
-    }
-
-    if (isProductionRuntime()) {
-      return c.json({
-        error: "Direct subscription upgrades are disabled in production. Use RevenueCat or payment webhook.",
-        code: "PAYMENT_REQUIRED",
-      }, 403);
-    }
-    
-    // Get current subscription
-    const currentSub = await kv.get(`subscription:${userId}`) || {
-      tier: 'free',
-      credits: 0,
-      postsThisMonth: 0,
-      monthlyPostLimit: 3,
-    };
-    
-    // Set new tier benefits
-    let newSubscription = {
-      ...currentSub,
-      tier,
-      updatedAt: new Date().toISOString(),
-    };
-    
-    if (tier === 'premium') {
-      newSubscription = {
-        ...newSubscription,
-        credits: (currentSub.credits || 0) + 10, // Add 10 edit credits on upgrade
-        monthlyPostLimit: 10, // Premium: 10 posts/month
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
-        features: {
-          canEditPosts: true,
-          unlimitedPosts: false,
-          prioritySupport: true,
-        }
-      };
-    } else if (tier === 'pro') {
-      newSubscription = {
-        ...newSubscription,
-        credits: 999, // Unlimited edits (represented as large number)
-        monthlyPostLimit: 999, // Unlimited posts
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
-        features: {
-          canEditPosts: true,
-          unlimitedPosts: true,
-          prioritySupport: true,
-        }
-      };
-    }
-    
-    await kv.set(`subscription:${userId}`, newSubscription);
-    
-    console.log(`Subscription upgraded: ${userId} to ${tier}`);
-    return c.json({ success: true, subscription: newSubscription });
+    return c.json({
+      error: "Direct subscription upgrades are disabled. Use Stripe Checkout or in-app purchase.",
+      code: "PAYMENT_REQUIRED",
+    }, 403);
   } catch (error) {
-    console.error("Error upgrading subscription:", error);
+    console.error("Error on subscription upgrade:", error);
     return c.json({ error: "Failed to upgrade subscription" }, 500);
   }
 });
 
-// Purchase edit credits — requires auth; disabled in production without payment
+// Direct credit purchases are never allowed without a payment provider
 app.post("/make-server-6c9b0e48/subscription/buy-credits", async (c) => {
+  try {
+    const authResult = await requireAuth(c);
+    if (authResult.error) return authResult.error;
+    return c.json({
+      error: "Direct credit purchases are disabled. Use Stripe Checkout or in-app purchase.",
+      code: "PAYMENT_REQUIRED",
+    }, 403);
+  } catch (error) {
+    console.error("Error on buy-credits:", error);
+    return c.json({ error: "Failed to buy credits" }, 500);
+  }
+});
+
+const ALLOWED_CHECKOUT_PLAN_IDS = new Set([
+  "premium_monthly",
+  "premium_yearly",
+  "pro_monthly",
+  "pro_yearly",
+]);
+
+function isAllowedCheckoutRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host === "betweenus.fun" || host.endsWith(".betweenus.fun")) return true;
+    return getAllowedOrigins().some((origin) => {
+      try {
+        return new URL(origin).hostname.toLowerCase() === host;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+// Authenticated Stripe Checkout Session (web)
+app.post("/make-server-6c9b0e48/subscription/checkout", async (c) => {
   try {
     const authResult = await requireAuth(c);
     if (authResult.error) return authResult.error;
     const user = authResult.user!;
 
-    const body = await c.req.json();
-    const { amount } = body;
-    const userId = user.id;
-    
-    if (!amount || typeof amount !== "number" || amount <= 0 || amount > 1000) {
-      return c.json({ error: "Valid amount is required" }, 400);
+    if (!isStripeConfigured()) {
+      return c.json({
+        error: "Stripe Checkout is not configured",
+        code: "STRIPE_NOT_CONFIGURED",
+      }, 503);
     }
 
-    if (isProductionRuntime()) {
-      return c.json({
-        error: "Direct credit purchases are disabled in production. Use RevenueCat or payment webhook.",
-        code: "PAYMENT_REQUIRED",
-      }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    const planId = typeof body?.planId === "string" ? body.planId.trim() : "";
+    const successUrl = typeof body?.successUrl === "string" ? body.successUrl.trim() : "";
+    const cancelUrl = typeof body?.cancelUrl === "string" ? body.cancelUrl.trim() : "";
+
+    if (!ALLOWED_CHECKOUT_PLAN_IDS.has(planId)) {
+      return c.json({ error: "Invalid planId", code: "INVALID_PLAN" }, 400);
     }
-    
-    const subscription = await kv.get(`subscription:${userId}`) || {
-      tier: 'free',
-      credits: 0,
-      postsThisMonth: 0,
-      monthlyPostLimit: 3,
-    };
-    
-    subscription.credits = (subscription.credits || 0) + amount;
-    subscription.updatedAt = new Date().toISOString();
-    
-    await kv.set(`subscription:${userId}`, subscription);
-    
-    console.log(`Credits purchased: ${userId} bought ${amount} credits`);
-    return c.json({ success: true, subscription });
+    if (!successUrl || !cancelUrl || !isAllowedCheckoutRedirectUrl(successUrl) || !isAllowedCheckoutRedirectUrl(cancelUrl)) {
+      return c.json({ error: "Invalid successUrl or cancelUrl", code: "INVALID_REDIRECT" }, 400);
+    }
+
+    const result = await createStripeCheckoutSession({
+      userId: user.id,
+      email: user.email || null,
+      planId,
+      successUrl,
+      cancelUrl,
+    });
+
+    if (!result.url) {
+      return c.json({
+        error: result.error || "Failed to create checkout session",
+        code: result.code || "STRIPE_CHECKOUT_FAILED",
+      }, result.code === "STRIPE_PRICE_MISSING" ? 503 : 500);
+    }
+
+    return c.json({ success: true, url: result.url });
   } catch (error) {
-    console.error("Error buying credits:", error);
-    return c.json({ error: "Failed to buy credits" }, 500);
+    console.error("Error creating checkout session:", error);
+    return c.json({ error: "Failed to create checkout session" }, 500);
+  }
+});
+
+// Stripe Customer Portal (manage / cancel)
+app.post("/make-server-6c9b0e48/subscription/portal", async (c) => {
+  try {
+    const authResult = await requireAuth(c);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user!;
+
+    const subscription = await getSubscriptionRecord(user.id);
+    const customerId = subscription.providerCustomerId;
+    if (!customerId || subscription.source !== "stripe") {
+      return c.json({
+        error: "No Stripe customer on this account",
+        code: "NO_STRIPE_CUSTOMER",
+      }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const returnUrl = typeof body?.returnUrl === "string" ? body.returnUrl.trim() : "";
+    if (!returnUrl || !isAllowedCheckoutRedirectUrl(returnUrl)) {
+      return c.json({ error: "Invalid returnUrl", code: "INVALID_REDIRECT" }, 400);
+    }
+
+    const result = await createStripeBillingPortalSession({
+      customerId,
+      returnUrl,
+    });
+    if (!result.url) {
+      return c.json({
+        error: result.error || "Failed to open billing portal",
+        code: result.code || "STRIPE_PORTAL_FAILED",
+      }, 500);
+    }
+    return c.json({ success: true, url: result.url });
+  } catch (error) {
+    console.error("Error creating billing portal session:", error);
+    return c.json({ error: "Failed to open billing portal" }, 500);
+  }
+});
+
+// Stripe webhooks (server-to-server; no client auth)
+app.post("/make-server-6c9b0e48/webhooks/stripe", async (c) => {
+  try {
+    const secret = getStripeWebhookSecret();
+    if (!secret) {
+      console.error("Stripe webhook secret not configured");
+      return c.json({ error: "Webhook not configured" }, 503);
+    }
+
+    const payload = await c.req.text();
+    const signature = c.req.header("Stripe-Signature") || c.req.header("stripe-signature");
+    const valid = await verifyStripeWebhookSignature(payload, signature, secret);
+    if (!valid) {
+      return c.json({ error: "Invalid signature", code: "INVALID_SIGNATURE" }, 401);
+    }
+
+    let event: any;
+    try {
+      event = JSON.parse(payload);
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+
+    const result = await handleStripeWebhookEvent(event);
+    console.log(`Stripe webhook ${event?.type}:`, result);
+    return c.json({ received: true, ...result });
+  } catch (error) {
+    console.error("Stripe webhook error:", error);
+    return c.json({ error: "Webhook handler failed" }, 500);
+  }
+});
+
+// RevenueCat webhooks (server-to-server; Authorization bearer = shared secret)
+app.post("/make-server-6c9b0e48/webhooks/revenuecat", async (c) => {
+  try {
+    const secret = getRevenueCatWebhookSecret();
+    if (!secret) {
+      console.error("RevenueCat webhook secret not configured");
+      return c.json({ error: "Webhook not configured" }, 503);
+    }
+
+    const authorization = c.req.header("Authorization");
+    if (!verifyRevenueCatWebhookAuth(authorization, secret)) {
+      return c.json({ error: "Unauthorized", code: "INVALID_SIGNATURE" }, 401);
+    }
+
+    const event = await c.req.json().catch(() => null);
+    if (!event) {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+
+    const result = await handleRevenueCatWebhookEvent(event);
+    console.log(`RevenueCat webhook:`, result);
+    return c.json({ received: true, ...result });
+  } catch (error) {
+    console.error("RevenueCat webhook error:", error);
+    return c.json({ error: "Webhook handler failed" }, 500);
   }
 });
 
@@ -2724,30 +2814,24 @@ app.get("/make-server-6c9b0e48/subscription/can-post", async (c) => {
     const self = await requireSelfUserId(c);
     if (self.error) return self.error;
     const userId = self.userId!;
-    
-    const subscription = await kv.get(`subscription:${userId}`) || {
-      tier: 'free',
-      credits: 0,
-      postsThisMonth: 0,
-      monthlyPostLimit: 3,
-      lastResetDate: new Date().toISOString(),
-    };
-    
+
+    const subscription = await getSubscriptionRecord(userId);
+
     // Check if we need to reset monthly counter
     const lastReset = new Date(subscription.lastResetDate || 0);
     const now = new Date();
     const daysSinceReset = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60 * 24);
-    
+
     if (daysSinceReset >= 30) {
       subscription.postsThisMonth = 0;
       subscription.lastResetDate = now.toISOString();
       await kv.set(`subscription:${userId}`, subscription);
     }
-    
+
     const canPost = subscription.postsThisMonth < subscription.monthlyPostLimit;
     const postsRemaining = subscription.monthlyPostLimit - subscription.postsThisMonth;
-    
-    return c.json({ 
+
+    return c.json({
       canPost,
       postsThisMonth: subscription.postsThisMonth,
       monthlyPostLimit: subscription.monthlyPostLimit,
