@@ -21,6 +21,8 @@ const { patchJournalPublicHtml } = require('./journal-public-seo.cjs')
 const ROOT = path.join(__dirname, '..')
 const PUBLIC = path.join(ROOT, 'public')
 const SITE = SITE_DEFAULT
+const OG_IMAGE = `${SITE}/assets/og-share.png`
+const OG_IMAGE_ALT = "Between Us — Say what you can't say anywhere else."
 
 function escapeHtml(value) {
   return String(value)
@@ -75,10 +77,15 @@ function pageShell({
   <meta property="og:title" content="${safeTitle}" />
   <meta property="og:description" content="${safeDesc}" />
   <meta property="og:url" content="${canonical}" />
-  <meta property="og:image" content="${SITE}/assets/betweenus-logo.png" />
+  <meta property="og:image" content="${OG_IMAGE}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${safeTitle}" />
   <meta name="twitter:description" content="${safeDesc}" />
+  <meta name="twitter:image" content="${OG_IMAGE}" />
+  <meta name="twitter:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}" />
   ${headAssets({ site: SITE })}
   ${extraHead}
   ${ld}
@@ -145,7 +152,7 @@ const HELP_SECTION = [
   'If you need more than a peer community',
   [
     'Between Us is a place to read and share anonymously with peers. It is not a crisis service, a clinic, or legal advice. If someone is hurting you, or you might hurt yourself, get help from a person who can act in the real world.',
-    'If you are in immediate danger, contact local emergency services. In the United States, call or text 988 (Suicide and Crisis Lifeline). In the UK and Ireland, Samaritans are available at 116 123 and at <a href="https://www.samaritans.org/">samaritans.org</a>. For other countries, the International Association for Suicide Prevention lists support at <a href="https://www.iasp.info/suicidalthoughts/">iasp.info/suicidalthoughts/</a>, and <a href="https://findahelpline.com/">findahelpline.com</a> can point you to a local line.',
+    'If you are in immediate danger, contact local emergency services. In the United States, call or text 988 (the 988 Suicide &amp; Crisis Lifeline). In the UK and Ireland, Samaritans are available at 116 123; their contact page is <a href="https://www.samaritans.org/how-we-can-help/contact-samaritan/">samaritans.org</a>. For other countries, the International Association for Suicide Prevention lists support at <a href="https://www.iasp.info/suicidalthoughts/">iasp.info/suicidalthoughts/</a>, and <a href="https://findahelpline.com/">findahelpline.com</a> can point you to a local line.',
   ],
 ]
 
@@ -837,7 +844,7 @@ function renderGuidePage(guide) {
         description: prepared.description,
         datePublished: published,
         dateModified: modified,
-        image: [`${SITE}/assets/betweenus-logo.png`],
+        image: [OG_IMAGE],
         author: { '@type': 'Organization', name: 'Between Us' },
         publisher: {
           '@type': 'Organization',

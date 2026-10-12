@@ -109,7 +109,7 @@ function patchArticleHtml(html, slug) {
     (next.match(/<meta name="description" content="([^"]*)"/) || [])[1] || ''
   )
   const imageMatch = next.match(/"image":\["([^"]+)"\]/)
-  const image = imageMatch ? imageMatch[1] : `${SITE}/assets/betweenus-logo.png`
+  const image = imageMatch ? imageMatch[1] : `${SITE}/assets/og-share.png`
 
   if (!next.includes('property="og:title"')) {
     next = next.replace(
@@ -168,7 +168,31 @@ function patchJournalIndexHtml(html) {
       `<meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Journal | Between Us" />
   <meta name="twitter:description" content="Editorial stories and reflections from Between Us — relationships, friendship, secrets, and the things worth talking about." />
-  <meta name="twitter:image" content="${SITE}/assets/betweenus-logo.png" />`
+  <meta name="twitter:image" content="${SITE}/assets/og-share.png" />
+  <meta name="twitter:image:alt" content="Between Us — Say what you can't say anywhere else." />`
+    )
+  }
+  const shareImage = `${SITE}/assets/og-share.png`
+  const logoImage = `${SITE}/assets/betweenus-logo.png`
+  const shareAlt = 'Between Us — Say what you can\'t say anywhere else.'
+  next = next.replaceAll(
+    `<meta property="og:image" content="${logoImage}" />`,
+    `<meta property="og:image" content="${shareImage}" />`
+  )
+  next = next.replaceAll(
+    `<meta name="twitter:image" content="${logoImage}" />`,
+    `<meta name="twitter:image" content="${shareImage}" />`
+  )
+  if (!next.includes('property="og:image:width"')) {
+    next = next.replace(
+      `<meta property="og:image" content="${shareImage}" />`,
+      `<meta property="og:image" content="${shareImage}" />\n  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />\n  <meta property="og:image:alt" content="${shareAlt}" />`
+    )
+  }
+  if (!next.includes('name="twitter:image:alt"')) {
+    next = next.replace(
+      `<meta name="twitter:image" content="${shareImage}" />`,
+      `<meta name="twitter:image" content="${shareImage}" />\n  <meta name="twitter:image:alt" content="${shareAlt}" />`
     )
   }
   if (!next.includes('"@type":"Blog"')) {

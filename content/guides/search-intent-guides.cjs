@@ -19,7 +19,7 @@ module.exports = [
         'Name the hard thing in one sentence first',
         [
           'Before you think about tone, write the actual point in a single sentence you could say out loud. “I felt dropped when you cancelled again” is a point. “You always do this and everyone agrees” is a case file. If you cannot say the point without a pile of evidence, you are not ready to talk. You are ready to vent, which is a different job. Use a private note or a careful anonymous <a href="/features/spill">Spill</a> to sort the pile, then come back to the one sentence.',
-          'The sentence should include your experience, not their diagnosis. “I felt embarrassed when the joke was about me” gives them something to respond to. “You are selfish” asks them to defend a personality. People can discuss a moment. They rarely confess to a label. If the hard thing is a pattern, still start with one moment they will recognize. You can widen it after they are actually in the conversation.',
+          'The sentence should include your experience, not a verdict on their character. “I felt embarrassed when the joke was about me” gives them something to respond to. “You are selfish” asks them to defend a personality. People can discuss a moment. They rarely confess to a label. If the hard thing is a pattern, still start with one moment they will recognize. You can widen it after they are actually in the conversation.',
         ],
       ],
       [
@@ -338,7 +338,7 @@ module.exports = [
         'Recalibrate without a public trial',
         [
           'You do not have to post their name, their job, or the screenshots to be allowed to feel disappointed. Talking it through with one person outside the group, or writing an anonymous version with the identifiers removed, is enough. A group chat referendum will not make the friendship mutual. It will make you someone they cannot trust with the next hard thing.',
-          'Read other people’s friendship snarls on <a href="/stories">Stories</a> if you want company, not a jury. Notice how often the useful replies say “ask them” or “stop over-functioning,” and how rarely they say “destroy them.” If you Spill your own version, keep the question tight: “Is this a season or a pattern, and how did you step back without cruelty?”',
+          'Read other people’s friendship snarls on <a href="/stories">Stories</a> if you want company, not a jury. Keep the replies that help you ask a clearer question, and leave the ones that only heat you up. If you Spill your own version, keep the question tight: “Is this a season or a pattern, and how did you step back without cruelty?”',
         ],
       ],
       [

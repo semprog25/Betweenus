@@ -5,7 +5,7 @@
 - Highest-leverage free growth move shipped in-repo only: five search-intent Guides plus technical SEO fixes. No production deploy, no Supabase writes.
 - New Guides (900–1500 words, FAQ + Article schema, sitemap): tell a friend something hard; can’t talk to anyone about a relationship; vent anonymously and stay safe; signs a friendship is one-sided; set a boundary with a friend.
 - SEO fixes: absolute Journal canonicals, Open Graph/Twitter on Journal articles, FAQ on Journal + Guides, Blog schema on `/journal/`, CollectionPage on Guides, `/about` canonical consolidated to `/journey`, journal sitemap URLs use trailing slashes and `publishedAt`, `generateJournal` no longer replaces the marketing sitemap, `generate:marketing` parses again (unescaped backticks in the stories showcase template).
-- Not fixed here: no 1200×630 share image (logo is 911×191; stock photos are 640×360). Live site stays stale until an authorized landing deploy.
+- Default share image is `public/assets/og-share.png` (1200×630, rendered from `scripts/og-share/og-share.svg`). Journal essays keep their own images. Live site stays stale until an authorized landing deploy.
 
 ## Web-only desktop responsiveness (2026-09-07)
 

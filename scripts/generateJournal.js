@@ -180,7 +180,7 @@ function renderArticle(article, allLive) {
   const url = articleUrl(article)
   const title = article.seo_title || `${article.title} | Between Us Journal`
   const description = article.seo_description || article.excerpt || ''
-  const image = publicImageUrl(article.social_image || article.featured_image) || `${SITE}/assets/betweenus-logo.png`
+  const image = publicImageUrl(article.social_image || article.featured_image) || `${SITE}/assets/og-share.png`
   const published = article.published_at || article.updated_at
   const modified = article.updated_at || published
   const canonical = absoluteArticleCanonical(article.canonical_url, url)
@@ -372,11 +372,15 @@ function renderIndex(live) {
   <meta property="og:title" content="Between Us Journal" />
   <meta property="og:description" content="Editorial stories and reflections from Between Us." />
   <meta property="og:url" content="${SITE}/journal/" />
-  <meta property="og:image" content="${SITE}/assets/betweenus-logo.png" />
+  <meta property="og:image" content="${SITE}/assets/og-share.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Between Us — Say what you can't say anywhere else." />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Journal | Between Us" />
   <meta name="twitter:description" content="Editorial stories and reflections from Between Us — relationships, friendship, secrets, and the things worth talking about." />
-  <meta name="twitter:image" content="${SITE}/assets/betweenus-logo.png" />
+  <meta name="twitter:image" content="${SITE}/assets/og-share.png" />
+  <meta name="twitter:image:alt" content="Between Us — Say what you can't say anywhere else." />
   ${headAssets({ site: SITE })}
   <script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
