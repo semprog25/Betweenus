@@ -64,6 +64,11 @@
   font-size: 1.55rem;
 }
 
+.bu-journal-body h3 {
+  font-size: 1.08rem;
+  margin-top: 1.25rem;
+}
+
 .bu-journal-body table {
   width: 100%;
   border-collapse: collapse;

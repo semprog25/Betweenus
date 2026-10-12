@@ -7,6 +7,10 @@
 
 ## In progress
 - Deploy Phase 1 landing changes to betweenus.fun (push `betweenus_landing`)
+- Organic Guides + SEO fixes are in the app repo PR only — not deployed to betweenus.fun
+
+## Done (2026-10-12)
+- Five crawlable search-intent Guides and Journal/Guide SEO repairs (canonicals, Open Graph, FAQ schema, sitemap). Build via `npm run generate:marketing` then `npm run build`.
 
 ## Done this session
 - Phase 0 full audit documented in `memory-bank/PHASE0_AUDIT.md`

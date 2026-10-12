@@ -1,5 +1,12 @@
 # Active Context
 
+## Organic search guides (2026-10-12)
+
+- Highest-leverage free growth move shipped in-repo only: five search-intent Guides plus technical SEO fixes. No production deploy, no Supabase writes.
+- New Guides (900–1500 words, FAQ + Article schema, sitemap): tell a friend something hard; can’t talk to anyone about a relationship; vent anonymously and stay safe; signs a friendship is one-sided; set a boundary with a friend.
+- SEO fixes: absolute Journal canonicals, Open Graph/Twitter on Journal articles, FAQ on Journal + Guides, Blog schema on `/journal/`, CollectionPage on Guides, `/about` canonical consolidated to `/journey`, journal sitemap URLs use trailing slashes and `publishedAt`, `generateJournal` no longer replaces the marketing sitemap, `generate:marketing` parses again (unescaped backticks in the stories showcase template).
+- Not fixed here: no 1200×630 share image (logo is 911×191; stock photos are 640×360). Live site stays stale until an authorized landing deploy.
+
 ## Web-only desktop responsiveness (2026-09-07)
 
 - **Problem:** Authenticated web app felt like a phone frame — nested `max-w` (shell 48rem + tab `max-w-md`/`max-w-4xl`), Check-in locked to phone column, Community used native `pb-24` scroll nesting, EN missing `community.tabAll` (raw key in UI).
