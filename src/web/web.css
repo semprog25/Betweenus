@@ -2288,6 +2288,12 @@ html.bu-auth-open {
   color: #52525b;
 }
 
+.bu-public-footer-credit {
+  display: block;
+  margin-top: 0.35rem;
+  color: #808089;
+}
+
 /* Public content pages */
 .bu-public-page {
   max-width: 42rem;
