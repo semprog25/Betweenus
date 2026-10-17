@@ -80,7 +80,7 @@ function footerHtml({ site = SITE_DEFAULT, note = '' } = {}) {
       <a href="/terms">Terms</a>
       <a href="/support">Support</a>
     </nav>
-    <p class="bu-public-footer-copy">© ${year} Between Us<span class="bu-public-footer-credit">Developed by SEMPROG</span></p>
+    <p class="bu-public-footer-copy">© ${year} Between Us<span class="bu-public-footer-credit">Developed and built by <a href="https://semprog.de" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-underline-offset:2px">SEMPROG</a></span></p>
     ${noteHtml}
   </div>
 </footer>`
