@@ -190,7 +190,7 @@ export function PublicFooter({
 
           <p className="bu-public-footer-copy">
             © {new Date().getFullYear()} Between Us
-            <span className="bu-public-footer-credit">Developed by SEMPROG</span>
+            <span className="bu-public-footer-credit">Developed and built by{" "}<a href="https://semprog.de" target="_blank" rel="noopener" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: "2px" }}>SEMPROG</a></span>
           </p>
         </div>
       </div>
