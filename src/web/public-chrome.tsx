@@ -188,7 +188,10 @@ export function PublicFooter({
             ))}
           </nav>
 
-          <p className="bu-public-footer-copy">© {new Date().getFullYear()} Between Us</p>
+          <p className="bu-public-footer-copy">
+            © {new Date().getFullYear()} Between Us
+            <span className="bu-public-footer-credit">Developed by SEMPROG</span>
+          </p>
         </div>
       </div>
     </footer>

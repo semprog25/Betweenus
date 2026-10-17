@@ -80,7 +80,7 @@ function footerHtml({ site = SITE_DEFAULT, note = '' } = {}) {
       <a href="/terms">Terms</a>
       <a href="/support">Support</a>
     </nav>
-    <p class="bu-public-footer-copy">© ${year} Between Us</p>
+    <p class="bu-public-footer-copy">© ${year} Between Us<span class="bu-public-footer-credit">Developed by SEMPROG</span></p>
     ${noteHtml}
   </div>
 </footer>`
