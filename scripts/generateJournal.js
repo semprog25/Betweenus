@@ -47,6 +47,12 @@ const {
   preferredSourceAsideHtml,
   storeButtonsHtml: chromeStoreButtons,
 } = require('./public-chrome.cjs')
+const {
+  absoluteArticleCanonical,
+  journalFaqHtml,
+  faqJsonLd,
+  loadJournalFaq,
+} = require('./journal-public-seo.cjs')
 
 /** Ads stay off until real ca-pub + slot IDs + BETWEENUS_ADSENSE_CONSENT_READY=true */
 const AD_CONFIG = loadAdConfigFromEnv(process.env)
@@ -174,10 +180,14 @@ function renderArticle(article, allLive) {
   const url = articleUrl(article)
   const title = article.seo_title || `${article.title} | Between Us Journal`
   const description = article.seo_description || article.excerpt || ''
-  const image = publicImageUrl(article.social_image || article.featured_image) || `${SITE}/assets/betweenus-logo.png`
+  const image = publicImageUrl(article.social_image || article.featured_image) || `${SITE}/assets/og-share.png`
   const published = article.published_at || article.updated_at
   const modified = article.updated_at || published
-  const canonical = article.canonical_url || url
+  const canonical = absoluteArticleCanonical(article.canonical_url, url)
+  const faq = loadJournalFaq()[article.slug] || []
+  const faqLd = faq.length
+    ? `<script type="application/ld+json">${JSON.stringify(faqJsonLd(faq))}</script>`
+    : ''
   const robots = article.noindex ? 'noindex,follow' : 'index,follow'
   // Ads are presentation-only — article.body from CMS stays content-only
   const injected = injectInContentAds(article.body || '', AD_CONFIG)
@@ -206,7 +216,7 @@ function renderArticle(article, allLive) {
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: SITE + '/' },
       { '@type': 'ListItem', position: 2, name: 'Journal', item: SITE + '/journal/' },
-      { '@type': 'ListItem', position: 3, name: article.title, item: url },
+      { '@type': 'ListItem', position: 3, name: article.title, item: canonical },
     ],
   }
 
@@ -235,6 +245,7 @@ function renderArticle(article, allLive) {
   ${adsenseHeadSnippet(AD_CONFIG)}
   <script type="application/ld+json">${JSON.stringify(jsonLdArticle)}</script>
   <script type="application/ld+json">${JSON.stringify(jsonLdBreadcrumb)}</script>
+  ${faqLd}
   ${preferredSourceHeadScript()}
 </head>
 <body class="bu-static">
@@ -248,7 +259,7 @@ function renderArticle(article, allLive) {
     ${article.subtitle ? `<p style="font-size:1.15rem;color:var(--bu-muted)">${escapeHtml(article.subtitle)}</p>` : ''}
     <p class="bu-journal-meta">By ${escapeHtml(article.author || 'Between Us Editorial')} · ${escapeHtml(new Date(published).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}${article.reading_time_minutes ? ` · ${article.reading_time_minutes} min read` : ''}</p>
     ${article.featured_image ? `<img class="bu-journal-hero-img" src="${escapeHtml(publicImageUrl(article.featured_image))}" alt="${escapeHtml(article.featured_image_alt || article.title)}" width="1200" height="675" fetchpriority="high" />` : ''}
-    <div class="bu-journal-body">${injected.html}</div>
+    <div class="bu-journal-body">${injected.html}${journalFaqHtml(faq)}</div>
     ${ctaHtml('mid')}
     ${afterAd}
     ${relatedHtml(article, allLive)}
@@ -357,12 +368,28 @@ function renderIndex(live) {
   <meta name="robots" content="index,follow" />
   <link rel="canonical" href="${SITE}/journal/" />
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Between Us" />
   <meta property="og:title" content="Between Us Journal" />
   <meta property="og:description" content="Editorial stories and reflections from Between Us." />
   <meta property="og:url" content="${SITE}/journal/" />
-  <meta property="og:image" content="${SITE}/assets/betweenus-logo.png" />
+  <meta property="og:image" content="${SITE}/assets/og-share.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Between Us — Say what you can't say anywhere else." />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Journal | Between Us" />
+  <meta name="twitter:description" content="Editorial stories and reflections from Between Us — relationships, friendship, secrets, and the things worth talking about." />
+  <meta name="twitter:image" content="${SITE}/assets/og-share.png" />
+  <meta name="twitter:image:alt" content="Between Us — Say what you can't say anywhere else." />
   ${headAssets({ site: SITE })}
+  <script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: 'Between Us Journal',
+    description: 'Editorial stories and reflections from Between Us — relationships, friendship, secrets, and the things worth talking about.',
+    url: `${SITE}/journal/`,
+    publisher: { '@type': 'Organization', name: 'Between Us', url: SITE },
+  })}</script>
   <style>${sharedCss()}</style>
 </head>
 <body class="bu-static">
@@ -427,34 +454,39 @@ function writeHomeCards(live) {
 }
 
 function updateSitemap(live) {
-  const sitemapPath = SITEMAP_PATH
-  const urls = [
-    { loc: `${SITE}/`, changefreq: 'hourly', priority: '1.0' },
-    { loc: `${SITE}/journal/`, changefreq: 'weekly', priority: '0.9' },
-    { loc: `${SITE}/stories`, changefreq: 'hourly', priority: '0.8' },
-    { loc: `${SITE}/privacy`, changefreq: 'monthly', priority: '0.4' },
-    { loc: `${SITE}/terms`, changefreq: 'monthly', priority: '0.4' },
-    { loc: `${SITE}/support`, changefreq: 'monthly', priority: '0.4' },
-  ]
-  for (const a of live) {
-    if (a.noindex) continue
-    urls.push({
-      loc: articleUrl(a),
-      lastmod: (a.updated_at || a.published_at || '').slice(0, 10),
-      changefreq: 'monthly',
-      priority: '0.7',
-    })
+  // Marketing generator owns the full sitemap. This merge only refreshes
+  // journal article URLs so a later generate:journal cannot drop Guides.
+  const preserved = []
+  if (fs.existsSync(SITEMAP_PATH)) {
+    const xml = fs.readFileSync(SITEMAP_PATH, 'utf8')
+    const blocks = xml.match(/<url>[\s\S]*?<\/url>/g) || []
+    for (const block of blocks) {
+      const loc = (block.match(/<loc>([^<]+)<\/loc>/) || [])[1] || ''
+      const pathOnly = loc.replace(SITE, '')
+      if (/^\/journal\/[^/]+\/?$/.test(pathOnly)) continue
+      preserved.push(block.trim().replace(/^/gm, '  ').replace(/^  <url>/, '  <url>'))
+    }
   }
+  const articleBlocks = live
+    .filter((article) => !article.noindex)
+    .map((article) => {
+      const lastmod = (article.updated_at || article.published_at || '').slice(0, 10)
+      return `  <url>
+    <loc>${articleUrl(article)}</loc>${lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : ''}
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+    })
+  const body = [...preserved, ...articleBlocks]
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((u) => `  <url>
-    <loc>${u.loc}</loc>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''}
-    <changefreq>${u.changefreq}</changefreq>
-    <priority>${u.priority}</priority>
-  </url>`).join('\n')}
+${body.join('\n')}
 </urlset>
 `
-  fs.writeFileSync(sitemapPath, xml)
+  fs.writeFileSync(SITEMAP_PATH, xml)
+  if (!preserved.length) {
+    console.warn('[generateJournal] sitemap had no non-article URLs; run npm run generate:marketing to rebuild the full sitemap')
+  }
 }
 
 async function fetchArticles() {
