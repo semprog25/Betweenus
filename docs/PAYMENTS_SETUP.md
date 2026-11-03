@@ -52,14 +52,21 @@ Authorization header = shared secret → Edge secret `REVENUECAT_WEBHOOK_SECRET`
 
 ## 3. Deploy Edge secrets + function
 
-```bash
-# Example — use your real values; do not commit them
-supabase secrets set STRIPE_SECRET_KEY=... STRIPE_WEBHOOK_SECRET=... \
-  STRIPE_PRICE_PREMIUM_MONTHLY=... STRIPE_PRICE_PREMIUM_YEARLY=... \
-  STRIPE_PRICE_PRO_MONTHLY=... STRIPE_PRICE_PRO_YEARLY=... \
-  REVENUECAT_WEBHOOK_SECRET=...
+Prefer **Dashboard → Edge Functions → Secrets** for production. For CLI, use an **owner release PAT** and isolated wrapper (no global `supabase login`): see **`docs/BETWEENUS_SUPABASE_CREDENTIALS.md`**.
 
-npm run deploy:function
+```bash
+# Example — owner Terminal.app only; do not commit values
+# export BETWEEN_US_OWNER_RELEASE_SUPABASE_ACCESS_TOKEN from Keychain (see credentials doc)
+# ./scripts/between-us-owner-supabase-cli.sh secrets set STRIPE_SECRET_KEY=... ...
+
+# Plan-only (safe): npm run edge-deploy:plan
+# Execute: BETWEEN_US_PRODUCTION_EDGE_DEPLOY_APPROVED=1 BETWEEN_US_EDGE_DEPLOY_EXECUTE=1 \
+#   ./scripts/between-us-edge-deploy.sh --execute
+
+# Production deploy (owner Terminal.app; same gates as edge-deploy --execute):
+# export BETWEEN_US_OWNER_RELEASE_SUPABASE_ACCESS_TOKEN=... 
+# export BETWEEN_US_PRODUCTION_EDGE_DEPLOY_APPROVED=1 BETWEEN_US_EDGE_DEPLOY_EXECUTE=1
+# npm run deploy:function
 ```
 
 ## 4. Verify
