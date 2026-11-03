@@ -46,3 +46,5 @@ Thumbs.db
 
 
 supabase/.temp/
+.between-us-agent-supabase.local
+.between-us-owner-release-supabase.local

@@ -141,6 +141,12 @@
 - Logged in: `/app` shell with sidebar + existing tabs; refresh keeps session; logout returns to `/`
 - Deploy: `scripts/deploy-web-to-landing.sh` → local `betweenus_landing` updated; **push landing repo for betweenus.fun**
 
+## Supabase CLI isolation (2026-11-02)
+
+- Isolated CLI wrappers + `docs/BETWEENUS_SUPABASE_CREDENTIALS.md`; `scripts/between-us-edge-deploy.sh` (plan-only default).
+- **`npm run deploy:function`** routes to guarded **`between-us-edge-deploy.sh --execute`** (owner PAT + `BETWEEN_US_PRODUCTION_EDGE_DEPLOY_APPROVED=1` + `BETWEEN_US_EDGE_DEPLOY_EXECUTE=1`); no bare `supabase` / global login.
+- Local verify: `npm run test:supabase-cli-wrapper` (dummy tokens only).
+
 ## Phase 2 release gate — iOS Bundle ID migration (2026-08-24)
 
 ### Platform identities (locked)
