@@ -38,7 +38,7 @@
   })
     .then((res) => res.json())
     .then((data) => {
-      // Feed responses may omit `success`; trust an array of posts when present.
+      // Feed responses may omit success; trust an array of posts when present.
       const posts = (data && Array.isArray(data.posts)) ? data.posts : [];
       if (!posts.length) {
         renderError('Live highlights are offline for a moment — explore these instead.');

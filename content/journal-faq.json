@@ -1,0 +1,58 @@
+{
+  "the-gossip-we-all-pretend-we-dont-love": [
+    {
+      "question": "Why does gossip feel interesting even when people say they hate it?",
+      "answer": "A secret feels exclusive. The line “you didn’t hear this from me” makes ordinary news sound valuable, and sharing it can briefly make a group feel close. Interest is not the same as permission to spread someone’s private life."
+    },
+    {
+      "question": "When does gossip become cruelty?",
+      "answer": "Laughing about a ridiculous public moment is different from spreading private information, inventing details, or trying to damage someone’s reputation. A useful test from the essay: would you say it if the person were standing next to you?"
+    },
+    {
+      "question": "Why do gossip stories change as they travel?",
+      "answer": "Each retelling adds a guess. A possibility becomes a certainty, and the person at the center is often not there to correct it. That drift is why a story can feel true in a group chat and still be unfair."
+    }
+  ],
+  "things-people-say-behind-your-back": [
+    {
+      "question": "Should I respond to everything people say about me?",
+      "answer": "No. Some comments are incomplete, bored, or none of your business to litigate. Respond when the talk is harmful — when it threatens your work, safety, or relationships — not every time a version of you exists without you in the room."
+    },
+    {
+      "question": "Why do people talk when they do not know the whole story?",
+      "answer": "A five-minute conversation rarely includes your context. The office version is often worse because status is involved. The essay’s point is that the version of you in other people’s mouths is not a full portrait, and it does not always deserve a scene."
+    },
+    {
+      "question": "What if what they said is actually harmful?",
+      "answer": "Document what you know, avoid a public retaliation spiral, and deal with the people who have power over the consequence — a manager, a host, or a direct conversation. Escalating the gossip usually feeds it."
+    }
+  ],
+  "when-your-friends-secret-isnt-really-a-secret": [
+    {
+      "question": "If several people know a secret, who broke it?",
+      "answer": "Often more than one person. A confidence told to “just one” friend, then a partner, then a group chat, stops being a secret without a single cinematic villain. The essay looks at how secrets escape, including screenshots."
+    },
+    {
+      "question": "What counts as a secret between friends?",
+      "answer": "Something shared with a clear expectation it would not travel: a relationship problem, a job fear, a humiliation. A funny story told at dinner is not the same object. If you are unsure, ask before you repeat it."
+    },
+    {
+      "question": "What should I do if I am the person who finds out secondhand?",
+      "answer": "Do not add a new audience. If the information is truly private, do not pass it on for closeness. If you need to talk about how it feels to know, talk about your discomfort without recruiting more people into the original secret."
+    }
+  ],
+  "the-office-gossip-nobody-asked-for": [
+    {
+      "question": "Why does office gossip spread so fast?",
+      "answer": "Work is a closed loop of meetings, coffee machines, and group chats. A mysterious calendar invite becomes a story because people are anxious and bored in the same building. Speed is not accuracy."
+    },
+    {
+      "question": "What is the difference between workplace tea and trouble?",
+      "answer": "Trading a harmless observation is not the same as spreading a rumor about someone’s job, body, or private life, or treating a guess as fact. The essay’s line is that the person who “knows everything” is often just earliest in a chain of guesses."
+    },
+    {
+      "question": "Should I correct an office rumor about me?",
+      "answer": "Correct it with the person who has the consequence — your manager, or the colleague repeating it — when the rumor can hurt your work. You do not have to brief every chat. Adding more detail sometimes confirms the story for people who only had a fragment."
+    }
+  ]
+}

@@ -16,10 +16,13 @@ const {
   headAssets,
   storeButtonsHtml,
 } = require('./public-chrome.cjs')
+const { patchJournalPublicHtml } = require('./journal-public-seo.cjs')
 
 const ROOT = path.join(__dirname, '..')
 const PUBLIC = path.join(ROOT, 'public')
 const SITE = SITE_DEFAULT
+const OG_IMAGE = `${SITE}/assets/og-share.png`
+const OG_IMAGE_ALT = "Between Us — Say what you can't say anywhere else."
 
 function escapeHtml(value) {
   return String(value)
@@ -47,14 +50,17 @@ function pageShell({
   active,
   bodyHtml,
   jsonLd,
+  ogType = 'website',
   extraHead = '',
 }) {
   const canonical = `${SITE}${canonicalPath}`
   const safeTitle = escapeHtml(title)
   const safeDesc = escapeHtml(description)
-  const ld = jsonLd
-    ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
-    : ''
+  const ldBlocks = (Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [])
+    .filter(Boolean)
+    .map((entry) => `<script type="application/ld+json">${JSON.stringify(entry)}</script>`)
+    .join('\n  ')
+  const ld = ldBlocks
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -66,15 +72,20 @@ function pageShell({
   <meta name="description" content="${safeDesc}" />
   <meta name="robots" content="index,follow" />
   <link rel="canonical" href="${canonical}" />
-  <meta property="og:type" content="website" />
+  <meta property="og:type" content="${escapeHtml(ogType)}" />
   <meta property="og:site_name" content="Between Us" />
   <meta property="og:title" content="${safeTitle}" />
   <meta property="og:description" content="${safeDesc}" />
   <meta property="og:url" content="${canonical}" />
-  <meta property="og:image" content="${SITE}/assets/betweenus-logo.png" />
+  <meta property="og:image" content="${OG_IMAGE}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${safeTitle}" />
   <meta name="twitter:description" content="${safeDesc}" />
+  <meta name="twitter:image" content="${OG_IMAGE}" />
+  <meta name="twitter:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}" />
   ${headAssets({ site: SITE })}
   ${extraHead}
   ${ld}
@@ -107,6 +118,73 @@ function ctaRow(primaryHref, primaryLabel, secondaryHref, secondaryLabel) {
   <a class="bu-btn-primary" href="${primaryHref}">${escapeHtml(primaryLabel)}</a>
   <a class="bu-btn-secondary" href="${secondaryHref}">${escapeHtml(secondaryLabel)}</a>
 </div>`
+}
+
+function stripTags(value) {
+  return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function faqSection(faq) {
+  if (!faq || !faq.length) return ''
+  const items = faq
+    .map((item) => `<h3>${escapeHtml(item.question)}</h3>\n<p>${item.answer}</p>`)
+    .join('\n')
+  return `<section class="bu-prose-section" id="faq">
+  <h2>Common questions</h2>
+  ${items}
+</section>`
+}
+
+function faqJsonLd(faq) {
+  if (!faq || !faq.length) return null
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: { '@type': 'Answer', text: stripTags(item.answer) },
+    })),
+  }
+}
+
+const HELP_SECTION = [
+  'If you need more than a peer community',
+  [
+    'Between Us is a place to read and share anonymously with peers. It is not a crisis service, a clinic, or legal advice. If someone is hurting you, or you might hurt yourself, get help from a person who can act in the real world.',
+    'If you are in immediate danger, contact local emergency services. In the United States, call or text 988 (the 988 Suicide &amp; Crisis Lifeline). In the UK and Ireland, Samaritans are available at 116 123; their contact page is <a href="https://www.samaritans.org/how-we-can-help/contact-samaritan/">samaritans.org</a>. For other countries, the International Association for Suicide Prevention lists support at <a href="https://www.iasp.info/suicidalthoughts/">iasp.info/suicidalthoughts/</a>, and <a href="https://findahelpline.com/">findahelpline.com</a> can point you to a local line.',
+  ],
+]
+
+function prepareGuide(guide) {
+  if (!guide.includeHelp) return guide
+  if (guide.sections.some(([title]) => title === HELP_SECTION[0])) return guide
+  return { ...guide, sections: [...guide.sections, HELP_SECTION] }
+}
+
+function guideWordCount(guide) {
+  const prepared = prepareGuide(guide)
+  const parts = [prepared.lead || '']
+  for (const [title, paragraphs] of prepared.sections || []) {
+    parts.push(title, ...(paragraphs || []))
+  }
+  for (const item of prepared.faq || []) {
+    parts.push(item.question, item.answer)
+  }
+  return stripTags(parts.join(' ')).split(/\s+/).filter(Boolean).length
+}
+
+function loadSearchIntentGuides() {
+  const file = path.join(ROOT, 'content', 'guides', 'search-intent-guides.cjs')
+  if (!fs.existsSync(file)) return []
+  const guides = require(file)
+  for (const guide of guides) {
+    const words = guideWordCount(guide)
+    if (words < 900 || words > 1500) {
+      throw new Error(`Guide "${guide.slug}" is ${words} words; expected 900–1500`)
+    }
+  }
+  return guides.map(prepareGuide)
 }
 
 function relatedLinks(items) {
@@ -393,7 +471,7 @@ const FEATURES = [
   },
 ]
 
-const GUIDES = [
+const CORE_GUIDES = [
   {
     slug: 'sharing-hard-truths-anonymously',
     title: 'Sharing hard truths without using your name',
@@ -431,10 +509,29 @@ const GUIDES = [
         ],
       ],
     ],
+    faq: [
+      {
+        question: 'Should I post anonymously if someone might still recognize the story?',
+        answer:
+          'Only if you can remove the details that make it recognizable. If the people involved would know it is you, keep the note private or rewrite until the useful question survives without the fingerprint.',
+      },
+      {
+        question: 'What should I remove before I publish?',
+        answer:
+          'Names, workplaces, schools, rare job titles, and timestamps that only your circle would know. Describe roles (“a friend from work,” “my partner”) instead of identities.',
+      },
+      {
+        question: 'When is a private note better than a public post?',
+        answer:
+          'When you cannot find the question you want answered, or when the post would escalate danger or humiliation. Write it privately first, then publish only the redacted version that asks for perspective.',
+      },
+    ],
+    published: '2026-09-06',
+    modified: '2026-10-12',
     related: [
       { href: '/features/spill', label: 'Spill', blurb: 'the writing flow' },
       { href: '/features/safety-and-privacy', label: 'Safety & Privacy', blurb: 'product boundaries' },
-      { href: '/guides/when-gossip-crosses-a-line', label: 'When gossip crosses a line', blurb: 'related guide' },
+      { href: '/guides/how-to-vent-anonymously-and-safely', label: 'Vent anonymously', blurb: 'a safer way to get it out' },
     ],
   },
   {
@@ -476,9 +573,28 @@ const GUIDES = [
         ],
       ],
     ],
+    faq: [
+      {
+        question: 'Do I have to use these prompts word for word?',
+        answer:
+          'No. They are openings, not a script. Use the shape — what happened, what you felt, what you need — in your own words, then leave room for the other person.',
+      },
+      {
+        question: 'What if the other person shuts down?',
+        answer:
+          'Agree on a short window and a pause word before you start, if you can. If they still shut down, stop for the day and name a time to come back. A paused talk is better than a forced one.',
+      },
+      {
+        question: 'Should I mention that an anonymous story helped me prepare?',
+        answer:
+          'You do not need to quote it. Translate the insight into your own experience. Anonymous reading is for your courage, not ammunition.',
+      },
+    ],
+    published: '2026-09-06',
+    modified: '2026-10-12',
     related: [
       { href: '/features/anonymous-stories', label: 'Anonymous Stories', blurb: 'find shared situations' },
-      { href: '/guides/building-a-private-check-in-habit', label: 'Private check-ins', blurb: 'track patterns first' },
+      { href: '/guides/how-to-tell-a-friend-something-hard', label: 'Tell a friend something hard', blurb: 'take the talk out of rehearsal' },
       { href: '/journal/', label: 'Journal', blurb: 'editorial essays on relationship themes' },
     ],
   },
@@ -519,9 +635,28 @@ const GUIDES = [
         ],
       ],
     ],
+    faq: [
+      {
+        question: 'Is all gossip harmful?',
+        answer:
+          'No. Processing a confusing situation with one trusted person is different from performing a villain story so other people will pile on. The line is humiliation, exposure, and punishment.',
+      },
+      {
+        question: 'When should I delete a draft instead of posting it?',
+        answer:
+          'Delete it when it only works if readers hate a specific person, or when it includes contact details, a workplace meant to invite harassment, or a rumor you cannot source.',
+      },
+      {
+        question: 'What if I am the person being talked about?',
+        answer:
+          'Document what you know and avoid a public retaliation post. Deal with the people who have a real consequence, and use support channels that do not make the blast radius bigger.',
+      },
+    ],
+    published: '2026-09-06',
+    modified: '2026-10-12',
     related: [
       { href: '/journal/the-gossip-we-all-pretend-we-dont-love/', label: 'Journal essay', blurb: 'gossip we pretend we do not love' },
-      { href: '/features/react-and-discuss', label: 'React & Discuss', blurb: 'reply without piling on' },
+      { href: '/guides/how-to-vent-anonymously-and-safely', label: 'Vent anonymously', blurb: 'get it out without a pile-on' },
       { href: '/terms', label: 'Terms', blurb: 'community standards' },
     ],
   },
@@ -562,9 +697,28 @@ const GUIDES = [
         ],
       ],
     ],
+    faq: [
+      {
+        question: 'Are daily check-ins visible to other people?',
+        answer:
+          'No. Between Us daily check-ins are a private loop. They are not published to Stories and they are not the editorial Journal.',
+      },
+      {
+        question: 'What if I miss a day?',
+        answer:
+          'Restart without treating the gap as a moral failure. The habit is a tiny anchor, not a streak you have to protect.',
+      },
+      {
+        question: 'When should a check-in become a Spill?',
+        answer:
+          'When a pattern points at a relational question you want perspective on, and you can redact it. You do not need to post every mood.',
+      },
+    ],
+    published: '2026-09-06',
+    modified: '2026-10-12',
     related: [
       { href: '/features/daily-check-ins', label: 'Daily Check-ins', blurb: 'how the feature works' },
-      { href: '/features/spill', label: 'Spill', blurb: 'when you want community input' },
+      { href: '/guides/when-you-cant-talk-to-anyone-about-your-relationship', label: 'When you cannot tell anyone', blurb: 'if the private note is not enough' },
       { href: '/download', label: 'Download', blurb: 'check in on your phone' },
     ],
   },
@@ -605,6 +759,25 @@ const GUIDES = [
         ],
       ],
     ],
+    faq: [
+      {
+        question: 'How often should we talk when we live apart?',
+        answer:
+          'Keep logistics as needed, and add one honesty window a week rather than constant messaging. Consistency matters more than being available every hour.',
+      },
+      {
+        question: 'Should I post about my partner while we are apart?',
+        answer:
+          'Do not put their private struggles into a public Spill. If you need perspective, redact heavily and write about your choices, not their secrets.',
+      },
+      {
+        question: 'What if texting makes fights worse?',
+        answer:
+          'Move the conflict to voice or video so tone survives, then write down the agreement you actually made. Text is a poor room for a charged repair.',
+      },
+    ],
+    published: '2026-09-06',
+    modified: '2026-10-12',
     related: [
       { href: '/guides/conversation-prompts-for-tough-relationship-talks', label: 'Conversation prompts', blurb: 'language for hard talks' },
       { href: '/features/daily-check-ins', label: 'Daily Check-ins', blurb: 'private mood tracking' },
@@ -612,6 +785,8 @@ const GUIDES = [
     ],
   },
 ]
+
+const GUIDES = [...loadSearchIntentGuides(), ...CORE_GUIDES]
 
 function renderFeaturePage(feature) {
   const sections = feature.sections
@@ -642,30 +817,62 @@ function renderFeaturePage(feature) {
 }
 
 function renderGuidePage(guide) {
-  const sections = guide.sections
+  const prepared = prepareGuide(guide)
+  const sections = prepared.sections
     .map(([title, paragraphs]) => proseSection(title, paragraphs))
     .join('\n')
+  const pageUrl = `${SITE}/guides/${prepared.slug}`
+  const cta = prepared.cta || {
+    primaryHref: '/features',
+    primaryLabel: 'See product features',
+    secondaryHref: '/journal/',
+    secondaryLabel: 'Read the Journal',
+  }
+  const published = prepared.published || '2026-09-06'
+  const modified = prepared.modified || published
   return pageShell({
-    title: `${guide.title} | Between Us Guides`,
-    description: guide.description,
-    canonicalPath: `/guides/${guide.slug}`,
+    title: `${prepared.title} | Between Us Guides`,
+    description: prepared.description,
+    canonicalPath: `/guides/${prepared.slug}`,
     active: 'guides',
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': 'Article',
-      headline: guide.title,
-      description: guide.description,
-      author: { '@type': 'Organization', name: 'Between Us' },
-      publisher: { '@type': 'Organization', name: 'Between Us', url: SITE },
-      mainEntityOfPage: `${SITE}/guides/${guide.slug}`,
-    },
+    ogType: 'article',
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: prepared.title,
+        description: prepared.description,
+        datePublished: published,
+        dateModified: modified,
+        image: [OG_IMAGE],
+        author: { '@type': 'Organization', name: 'Between Us' },
+        publisher: {
+          '@type': 'Organization',
+          name: 'Between Us',
+          url: SITE,
+          logo: { '@type': 'ImageObject', url: `${SITE}/assets/betweenus-logo.png` },
+        },
+        mainEntityOfPage: pageUrl,
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE}/` },
+          { '@type': 'ListItem', position: 2, name: 'Guides', item: `${SITE}/guides/` },
+          { '@type': 'ListItem', position: 3, name: prepared.title, item: pageUrl },
+        ],
+      },
+      faqJsonLd(prepared.faq),
+    ],
     bodyHtml: `
       <p class="bu-section-eyebrow">Guide</p>
-      <h1 class="bu-section-title">${escapeHtml(guide.title)}</h1>
-      <p class="bu-marketing-lead">${guide.lead}</p>
+      <h1 class="bu-section-title">${escapeHtml(prepared.title)}</h1>
+      <p class="bu-marketing-lead">${prepared.lead}</p>
       ${sections}
-      ${ctaRow('/features', 'See product features', '/journal/', 'Read the Journal')}
-      ${relatedLinks(guide.related)}
+      ${faqSection(prepared.faq)}
+      ${ctaRow(cta.primaryHref, cta.primaryLabel, cta.secondaryHref, cta.secondaryLabel)}
+      ${relatedLinks(prepared.related)}
     `,
   })
 }
@@ -713,15 +920,23 @@ function guidesIndexHtml() {
   return pageShell({
     title: 'Guides | Between Us',
     description:
-      'Practical Between Us guides on anonymous sharing, tough conversations, gossip ethics, private check-in habits, and staying connected across distance.',
+      'Practical Between Us guides on telling a friend something hard, one-sided friendships, anonymous venting, boundaries, and the relationship talks you keep postponing.',
     canonicalPath: '/guides/',
     active: 'guides',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Between Us Guides',
+      url: `${SITE}/guides/`,
+      description:
+        'Practical guides for anonymous sharing, hard friendship conversations, and safer venting.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <p class="bu-section-eyebrow">Resources</p>
       <h1 class="bu-section-title">Guides for honest conversations</h1>
       <p class="bu-marketing-lead">
-        Fewer pages, written to be useful on their own. These guides complement anonymous Stories and the editorial Journal —
-        they are not keyword filler.
+        Practical pages for the conversations people rehearse and do not send. These guides complement anonymous Stories and the editorial Journal.
       </p>
       <div class="bu-feature-link-grid">
         ${cards}
@@ -738,6 +953,15 @@ function journeyHtml() {
       'Why Between Us exists: an anonymous community for relationship secrets, hidden truths, and conversations you cannot have under your real name.',
     canonicalPath: '/journey',
     active: 'journey',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: 'The Between Us journey',
+      url: `${SITE}/journey`,
+      description:
+        'Why Between Us exists: an anonymous community for relationship secrets, hidden truths, and conversations you cannot have under your real name.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <p class="bu-section-eyebrow">Our story</p>
       <h1 class="bu-section-title">The Between Us journey</h1>
@@ -774,6 +998,15 @@ function storiesHtml() {
       'Browse anonymous community stories on Between Us — relationship drama, secrets, friendship conflicts, and real conversations without real names.',
     canonicalPath: '/stories',
     active: 'stories',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Anonymous Stories',
+      url: `${SITE}/stories`,
+      description:
+        'Browse anonymous community stories on Between Us — relationship drama, secrets, friendship conflicts, and real conversations without real names.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <p class="bu-section-eyebrow">Community</p>
       <h1 class="bu-section-title">Anonymous Stories</h1>
@@ -810,6 +1043,15 @@ function downloadHtml() {
       'Download Between Us for Android on Google Play. iOS App Store listing coming soon. Spill, react, and stay in the conversation.',
     canonicalPath: '/download',
     active: 'download',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Download Between Us',
+      url: `${SITE}/download`,
+      description:
+        'Download Between Us for Android on Google Play. iOS App Store listing coming soon.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <div class="bu-download-static-inner">
         <p class="bu-section-eyebrow">Get the app</p>
@@ -837,6 +1079,15 @@ function privacyHtml() {
       'How Between Us handles account data, anonymous stories, private check-ins, infrastructure, and website advertising.',
     canonicalPath: '/privacy',
     active: 'privacy',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Privacy',
+      url: `${SITE}/privacy`,
+      description:
+        'How Between Us handles account data, anonymous stories, private check-ins, infrastructure, and website advertising.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <h1 class="bu-section-title">Privacy</h1>
       <p class="bu-marketing-lead">This summary describes how Between Us handles data on the public website and in the app. It is not a substitute for legal counsel.</p>
@@ -872,6 +1123,15 @@ function termsHtml() {
       'Community standards and terms for using Between Us — anonymous storytelling with respect, legality, and safety.',
     canonicalPath: '/terms',
     active: 'terms',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Terms',
+      url: `${SITE}/terms`,
+      description:
+        'Community standards and terms for using Between Us — anonymous storytelling with respect, legality, and safety.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <h1 class="bu-section-title">Terms</h1>
       <p class="bu-marketing-lead">By using Between Us you agree to participate respectfully and lawfully in our anonymous community.</p>
@@ -901,6 +1161,15 @@ function supportHtml() {
       'Get help with Between Us accounts, Stories, privacy, reporting, and app issues on Android or iOS.',
     canonicalPath: '/support',
     active: 'support',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'ContactPage',
+      name: 'Support',
+      url: `${SITE}/support`,
+      description:
+        'Get help with Between Us accounts, Stories, privacy, reporting, and app issues on Android or iOS.',
+      isPartOf: { '@type': 'WebSite', name: 'Between Us', url: SITE },
+    },
     bodyHtml: `
       <h1 class="bu-section-title">Support</h1>
       <p class="bu-marketing-lead">Need help with Between Us? We are here for account, app, and community questions.</p>
@@ -928,11 +1197,12 @@ function supportHtml() {
 }
 
 function aboutHtml() {
-  // Pretty URL /about → about.html; content aliases Journey.
-  return journeyHtml()
-    .replace('canonical" href="https://betweenus.fun/journey"', 'canonical" href="https://betweenus.fun/about"')
-    .replace('<title>Journey | Between Us</title>', '<title>About | Between Us</title>')
-    .replace('content="https://betweenus.fun/journey"', 'content="https://betweenus.fun/about"')
+  // /about is the same document as /journey. Canonical stays on /journey
+  // so the two URLs are not indexed as competing copies.
+  return journeyHtml().replace(
+    '<title>Journey | Between Us</title>',
+    '<title>About | Between Us</title>'
+  )
 }
 
 function buildSitemap() {
@@ -961,6 +1231,7 @@ function buildSitemap() {
       loc: `/guides/${guide.slug}`,
       priority: '0.75',
       changefreq: 'monthly',
+      lastmod: guide.modified || guide.published,
     })
   }
 
@@ -975,10 +1246,10 @@ function buildSitemap() {
         if (!slug) continue
         const clean = String(slug).replace(/^\/?journal\//, '').replace(/\/$/, '')
         urls.push({
-          loc: `/journal/${clean}`,
+          loc: `/journal/${clean}/`,
           priority: '0.7',
           changefreq: 'monthly',
-          lastmod: article.published_at || article.updated_at || article.lastmod,
+          lastmod: article.published_at || article.publishedAt || article.updated_at || article.lastmod,
         })
       }
     } catch {
@@ -1061,7 +1332,7 @@ function storiesShowcaseJs() {
   })
     .then((res) => res.json())
     .then((data) => {
-      // Feed responses may omit `success`; trust an array of posts when present.
+      // Feed responses may omit success; trust an array of posts when present.
       const posts = (data && Array.isArray(data.posts)) ? data.posts : [];
       if (!posts.length) {
         renderError('Live highlights are offline for a moment — explore these instead.');
@@ -1114,6 +1385,7 @@ function main() {
   writeFile('stories-showcase.js', storiesShowcaseJs())
   writeFile('sitemap.xml', buildSitemap())
   writeFile('robots.txt', robotsTxt())
+  patchJournalPublicHtml(PUBLIC)
   console.log('Public marketing pages generated.')
 }
 

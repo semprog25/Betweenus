@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Between Us share image, 1200x630.
+  Render from this directory:
+    rsvg-convert -w 1200 -h 630 og-share.svg -o ../../public/assets/og-share.png
+  Outfit is licensed under the SIL Open Font License (fonts/OFL.txt).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <style>
+      @font-face {
+        font-family: "Outfit";
+        font-weight: 500;
+        src: url("fonts/Outfit-Medium.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "Outfit";
+        font-weight: 600;
+        src: url("fonts/Outfit-SemiBold.ttf") format("truetype");
+      }
+    </style>
+    <radialGradient id="glowPink" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d946ef" stop-opacity="0.55"/>
+      <stop offset="62%" stop-color="#d946ef" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowViolet" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.35"/>
+      <stop offset="70%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.42"/>
+      <stop offset="68%" stop-color="#f97316" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d946ef"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#05040a"/>
+  <rect width="1200" height="630" fill="#0a0118" opacity="0.92"/>
+  <ellipse cx="220" cy="120" rx="460" ry="300" fill="url(#glowPink)"/>
+  <ellipse cx="620" cy="300" rx="380" ry="220" fill="url(#glowViolet)"/>
+  <ellipse cx="1020" cy="540" rx="460" ry="280" fill="url(#glowOrange)"/>
+  <image href="../../public/assets/betweenus-logo.png" x="190" y="168" width="820" height="172" preserveAspectRatio="xMidYMid meet"/>
+  <text x="600" y="412" text-anchor="middle" fill="#f4f4f5" font-family="Outfit, sans-serif" font-weight="500" font-size="40">Say what you can't say anywhere else.</text>
+  <rect x="470" y="448" width="260" height="4" rx="2" fill="url(#rule)"/>
+</svg>
